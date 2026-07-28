@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>제주 배프로호 - 통합 예약 & 매출 통계 시스템</title>
+  <!-- OCR 라이브러리 -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- 차트 그래프 라이브러리 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --primary-color: #1e3a8a;
+      --accent-color: #2563eb;
+      --bg-color: #f8fafc;
+      --border-color: #cbd5e1;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); padding: 15px; color: #334155; }
+    
+    .container { max-width: 1350px; margin: 0 auto; }
+    
+    header { background: var(--primary-color); color: white; padding: 16px 20px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 15px; }
+    header h1 { font-size: 1.35rem; }
+    
+    /* 탭 메뉴 */
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; justify-content: space-between; }
+    .nav-tabs-left { display: flex; gap: 10px; }
+    .tab-btn { padding: 10px 18px; font-weight: bold; border-radius: 8px; border: 1px solid var(--border-color); background: white; cursor: pointer; font-size: 0.9rem; }
+    .tab-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; flex-direction: column; gap: 15px; }
+
+    .card { background: white; border-radius: 10px; border: 1px solid var(--border-color); padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    
+    /* 달력 스타일 */
+    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .cal-header select { padding: 5px 10px; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border-color); font-weight: bold; }
+    
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+    .cal-day-head { font-weight: bold; padding: 6px; background: #f1f5f9; border-radius: 4px; font-size: 0.82rem; }
+    .cal-day-head:nth-child(1) { color: #dc2626; }
+    .cal-day-head:nth-child(7) { color: #2563eb; }
+    
+    .cal-cell { min-height: 85px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 4px; cursor: pointer; text-align: left; background: white; transition: all 0.15s; position: relative; }
+    .cal-cell:hover { border-color: var(--accent-color); background: #f0f9ff; }
+    .cal-cell.selected { border: 2px solid var(--accent-color); background: #eff6ff; }
+    .cal-cell.other-month { opacity: 0.3; background: #f8fafc; }
+    .cell-num { font-weight: bold; font-size: 0.82rem; margin-bottom: 4px; }
+    
+    .badge-info { display: block; font-size: 0.72rem; padding: 2px 4px; border-radius: 3px; margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .tag-fish { background: #e0f2fe; color: #0369a1; font-weight: bold; }
+    .tag-count { background: #fef3c7; color: #b45309; font-weight: bold; }
+    .tag-status { background: #fee2e2; color: #991b1b; font-weight: bold; }
+    .tag-maintenance { background: #f3e8ff; color: #7e22ce; font-weight: bold; }
+
+    /* 상세 폼 스타일 */
+    .form-group { margin-bottom: 10px; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: bold; color: #475569; margin-bottom: 3px; }
+    .form-control { width: 100%; padding: 5px 7px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; }
+    .form-control:disabled { background-color: #f1f5f9; color: #64748b; }
+    
+    .inline-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .inline-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    
+    /* 테이블 스타일 */
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; margin-bottom: 10px; }
+    th, td { border: 1px solid #e2e8f0; padding: 5px 4px; font-size: 0.78rem; text-align: left; }
+    th { background: #f8fafc; font-weight: bold; color: #475569; text-align: center; }
+    
+    .btn { padding: 7px 12px; font-weight: bold; border-radius: 6px; border: none; cursor: pointer; font-size: 0.82rem; transition: background 0.2s; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-warning { background: #eab308; color: white; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-sm { padding: 3px 6px; font-size: 0.72rem; }
+
+    /* 매출 요약 박스 */
+    .summary-card { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin-top: 10px; }
+    .summary-card h4 { color: #166534; font-size: 0.88rem; margin-bottom: 5px; }
+    .summary-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 3px; }
+    .summary-row.total { font-weight: bold; font-size: 1.02rem; border-top: 1px solid #bbf7d0; padding-top: 5px; margin-top: 4px; color: #15803d; }
+
+    /* 통계 화면 스타일 */
+    .stats-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px; }
+    .stat-box { background: #f8fafc; border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; text-align: center; }
+    .stat-box h5 { font-size: 0.82rem; color: #64748b; margin-bottom: 4px; }
+    .stat-box .val { font-size: 1.25rem; font-weight: bold; color: var(--primary-color); }
+
+    .upload-box { background: #eff6ff; border: 2px dashed #93c5fd; padding: 8px; border-radius: 8px; margin-bottom: 10px; text-align: center; }
+    
+    .sync-status { font-size: 0.8rem; font-weight: bold; padding: 4px 10px; border-radius: 6px; background: #dbeafe; color: #1e40af; display: inline-flex; align-items: center; gap: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>🚢 제주 배프로호 통합 예약 & 매출 관리</h1>
+    <div id="clock" style="font-size: 0.85rem; opacity: 0.9;"></div>
+  </header>
+
+  <!-- 메인 탭 선택 -->
+  <div class="nav-tabs">
+    <div class="nav-tabs-left">
+      <button class="tab-btn active" onclick="switchTab('tab-daily', this)">📅 일별 예약/매출 관리</button>
+      <button class="tab-btn" onclick="switchTab('tab-stats', this)">📊 매출 통계 & 그래프</button>
+    </div>
+    <div>
+      <span id="sync-badge" class="sync-status">☁️ 구글시트 연동 대기중</span>
+      <button class="btn btn-success btn-sm" onclick="syncWithGoogleSheet()" style="margin-left: 8px;">🔄 시트 동기화</button>
+    </div>
+  </div>
+
+  <!-- TAB 1: 일별 관리 화면 (변경 없음) -->
+  <div id="tab-daily" class="tab-content active">
+    <!-- 위쪽: 달력 -->
+    <div class="card">
+      <div class="cal-header">
+        <div>
+          <select id="cal-year" onchange="renderCalendar()"></select>
+          <select id="cal-month" onchange="renderCalendar()"></select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="goToday()">오늘 날짜로</button>
+      </div>
+
+      <div class="calendar-grid" id="calendar-head">
+        <div class="cal-day-head">일</div>
+        <div class="cal-day-head">월</div>
+        <div class="cal-day-head">화</div>
+        <div class="cal-day-head">수</div>
+        <div class="cal-day-head">목</div>
+        <div class="cal-day-head">금</div>
+        <div class="cal-day-head">토</div>
+      </div>
+      <div class="calendar-grid" id="calendar-body" style="margin-top: 4px;"></div>
+    </div>
+
+    <!-- 아래쪽: 상세 정보 및 입력 -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 id="selected-date-title" style="color: var(--primary-color);">📅 날짜를 선택하세요</h3>
+        <div>
+          <button id="btn-edit" class="btn btn-warning" onclick="toggleEdit(true)">✏️ 수정하기</button>
+          <button id="btn-save" class="btn btn-success" onclick="saveData()" style="display:none;">💾 저장하기</button>
+          <button id="btn-cancel" class="btn btn-danger" onclick="toggleEdit(false)" style="display:none;">취소</button>
+        </div>
+      </div>
+
+      <form id="detail-form">
+        <!-- 캡쳐 이미지 업로드 영역 -->
+        <div class="form-group edit-only upload-box" style="display:none;">
+          <label style="color: #1e40af; font-size: 0.85rem; cursor: pointer; font-weight: bold;">📸 선상24 캡쳐본 첨부 (자동 텍스트 파싱)</label>
+          <input type="file" id="image-input" class="form-control" accept="image/*" onchange="processCaptureImage(this)" style="margin-top: 4px;">
+          <span id="ocr-status" style="font-size: 0.78rem; color: #2563eb; display: block; margin-top: 3px; font-weight: bold;"></span>
+        </div>
+
+        <div class="inline-grid-3">
+          <div class="form-group">
+            <label>어종</label>
+            <input type="text" id="fish-type" class="form-control" value="한치,오징어" disabled>
+          </div>
+          <div class="form-group">
+            <label>물때 정보</label>
+            <input type="text" id="water-info" class="form-control" value="11물" disabled>
+          </div>
+          <div class="form-group">
+            <label>기본 선비 (1인당 원)</label>
+            <input type="number" id="price-per-person" class="form-control" value="120000" disabled oninput="calculateSales()">
+          </div>
+        </div>
+
+        <div class="inline-grid-2">
+          <div class="form-group">
+            <label>출항지 / 장소</label>
+            <input type="text" id="depart-location" class="form-control" value="제주항 2부두" disabled>
+          </div>
+          <div class="form-group">
+            <label>운항 시간 / 상태</label>
+            <input type="text" id="depart-time" class="form-control" value="18:30 ~ 04:30" disabled>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>공지사항</label>
+          <input type="text" id="notice-text" class="form-control" value=" " disabled placeholder="공지사항">
+        </div>
+
+        <!-- 예약 완료 목록 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+          <h4 style="color: #16a34a; font-size:0.85rem;">✅ 예약 완료 손님 목록</h4>
+          <button type="button" class="btn btn-primary btn-sm edit-only" onclick="addGuestRow('completed')" style="display:none;">+ 손님 추가</button>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 18%;">이름</th>
+              <th style="width: 10%;">인원</th>
+              <th style="width: 32%;">비고 (메모)</th>
+              <th style="width: 10%;">베이트릴</th>
+              <th style="width: 10%;">낚시대</th>
+              <th style="width: 20%;">개별 금액</th>
+              <th class="edit-only" style="display:none; width:30px;">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="guest-completed-list"></tbody>
+        </table>
+
+        <!-- 당일 매출 요약 -->
+        <div class="summary-card">
+          <h4>📊 당일 매출 집계 (옵션/장비대여 합산)</h4>
+          <div class="summary-row">
+            <span>총 승객 수:</span>
+            <span id="stat-count" style="font-weight: bold;">0 명</span>
+          </div>
+          <div class="summary-row total">
+            <span>당일 총 매출액:</span>
+            <span id="stat-total">0 원</span>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TAB 2: 매출 통계 & 그래프 화면 (어종별 그래프 제외, 일별 매출액 막대 그래프 적용) -->
+  <div id="tab-stats" class="tab-content" style="display: none;">
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h3>📊 매출 & 승객 통계 보고서</h3>
+        <div style="display: flex; gap: 8px;">
+          <select id="stats-view-mode" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px;">
+            <option value="year">년도별 추이</option>
+            <option value="month" selected>월별 추이</option>
+            <option value="day">일별 추이</option>
+          </select>
+          <select id="stats-year-select" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px;">
+            <option value="2026">2026년</option>
+            <option value="2025">2025년</option>
+            <option value="2024">2024년</option>
+          </select>
+          <select id="stats-month-select" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px; display: none;">
+            <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+            <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+            <option value="7" selected>7월</option><option value="8">8월</option><option value="9">9월</option>
+            <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats-summary-grid">
+        <div class="stat-box">
+          <h5>기간 총 매출액</h5>
+          <div class="val" id="year-total-sales">0 원</div>
+        </div>
+        <div class="stat-box">
+          <h5>기간 총 승객 수</h5>
+          <div class="val" id="year-total-guests">0 명</div>
+        </div>
+        <div class="stat-box">
+          <h5>선비 외 대여/옵션 매출</h5>
+          <div class="val" id="year-option-sales" style="color: #16a34a;">0 원</div>
+        </div>
+      </div>
+
+      <!-- 막대 그래프 영역 단독 배치 -->
+      <div style="background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 10px;">
+        <h4 id="sales-chart-title" style="font-size: 0.95rem; margin-bottom: 10px; color: #334155;">📊 매출액 추이 (단위: 원)</h4>
+        <canvas id="salesChart" height="110"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 🔗 구글시트 웹앱 배포 URL
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywr_meg9xIEPmrGIfMoQHbjWCrkC7l1Mik07fTUtIYQdkw_oDzhyufDEVS0pAFuwAW2w/exec"; 
+
+  let dbData = {}; 
+  let selectedDateStr = '2026-07-06';
+  let salesChartObj = null;
+
+  dbData['2026-07-06'] = {
+    fish: '한치,오징어', water: '14물', price: 120000, location: '제주항 2부두', time: '18:30 ~ 04:30', notice: ' ', statusText: '',
+    completed: [
+      { name: '엄정욱', count: 1, note: ' ', reel: 0, rod: 0 },
+      { name: '김준호', count: 2, note: ' ', reel: 0, rod: 0 },
+      { name: '정대교', count: 2, note: ' ', reel: 0, rod: 0 },
+      { name: '보라', count: 2, note: ' ', reel: 0, rod: 0 },
+      { name: '임호섭', count: 1, note: ' ', reel: 0, rod: 0 },
+      { name: '윤창기', count: 1, note: '연타', reel: 0, rod: 0 },
+      { name: '차재수', count: 1, note: ' ', reel: 0, rod: 0 },
+      { name: '정회훈', count: 2, note: ' ', reel: 0, rod: 0 },
+      { name: '유성모', count: 2, note: ' ', reel: 0, rod: 0 }
+    ]
+  };
+
+  window.onload = function() {
+    initYearMonthSelect();
+    renderCalendar();
+    loadDateData(selectedDateStr);
+    syncWithGoogleSheet();
+  };
+
+  async function syncWithGoogleSheet() {
+    const badge = document.getElementById('sync-badge');
+    badge.innerText = "⏳ 구글시트 동기화 중...";
+    badge.style.background = "#fef3c7";
+    badge.style.color = "#b45309";
+
+    if(!WEB_APP_URL || WEB_APP_URL.includes("AKfycbw...")) {
+      badge.innerText = "⚠️ WEB_APP_URL 설정 필요";
+      badge.style.background = "#fee2e2";
+      badge.style.color = "#991b1b";
+      return;
+    }
+
+    try {
+      const response = await fetch(WEB_APP_URL);
+      const result = await response.json();
+      if(result && typeof result === 'object' && Object.keys(result).length > 0) {
+        dbData = result;
+        badge.innerText = "✅ 구글시트 동기화 완료";
+        badge.style.background = "#dcfce7";
+        badge.style.color = "#166534";
+        renderCalendar();
+        loadDateData(selectedDateStr);
+        if(document.getElementById('tab-stats').classList.contains('active')) {
+          updateStatsView();
+        }
+      }
+    } catch (err) {
+      console.error("동기화 실패:", err);
+      badge.innerText = "❌ 동기화 실패 (오프라인 모드)";
+      badge.style.background = "#fee2e2";
+      badge.style.color = "#991b1b";
+    }
+  }
+
+  async function saveToGoogleSheet() {
+    if(!WEB_APP_URL || WEB_APP_URL.includes("AKfycbw...")) return;
+
+    const badge = document.getElementById('sync-badge');
+    badge.innerText = "💾 구글시트 저장 중...";
+
+    try {
+      await fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dbData)
+      });
+      badge.innerText = "✅ 구글시트 저장 완료";
+      badge.style.background = "#dcfce7";
+      badge.style.color = "#166534";
+    } catch (err) {
+      console.error("저장 실패:", err);
+      badge.innerText = "❌ 구글시트 저장 오류";
+      badge.style.background = "#fee2e2";
+      badge.style.color = "#991b1b";
+    }
+  }
+
+  function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(tc => {
+      tc.classList.remove('active');
+      tc.style.display = 'none';
+    });
+    document.querySelectorAll('.tab-btn').forEach(tb => tb.classList.remove('active'));
+    
+    const targetTab = document.getElementById(tabId);
+    targetTab.classList.add('active');
+    targetTab.style.display = 'flex';
+    btn.classList.add('active');
+
+    if(tabId === 'tab-stats') {
+      updateStatsView();
+    }
+  }
+
+  function initYearMonthSelect() {
+    const yearSel = document.getElementById('cal-year');
+    const monthSel = document.getElementById('cal-month');
+    
+    for(let y = 2024; y <= 2030; y++) {
+      let opt = document.createElement('option');
+      opt.value = y; opt.innerText = y + '년';
+      if(y === 2026) opt.selected = true;
+      yearSel.appendChild(opt);
+    }
+    
+    for(let m = 1; m <= 12; m++) {
+      let opt = document.createElement('option');
+      opt.value = m; opt.innerText = m + '월';
+      if(m === 7) opt.selected = true;
+      monthSel.appendChild(opt);
+    }
+  }
+
+  function goToday() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = today.getMonth() + 1;
+    const d = today.getDate();
+    
+    document.getElementById('cal-year').value = y;
+    document.getElementById('cal-month').value = m;
+    
+    let mStr = m < 10 ? '0' + m : m;
+    let dStr = d < 10 ? '0' + d : d;
+    selectedDateStr = `${y}-${mStr}-${dStr}`;
+    
+    renderCalendar();
+    loadDateData(selectedDateStr);
+  }
+
+  function getFishEmoji(fishStr) {
+    if(!fishStr) return '';
+    if(fishStr.includes('한치') || fishStr.includes('오징어')) return '🦑 한치';
+    if(fishStr.includes('문어')) return '🐙 문어';
+    if(fishStr.includes('갈치')) return '🐟 갈치';
+    if(fishStr.includes('타이라바') || fishStr.includes('참돔')) return '🐟 참돔';
+    return `🐟 ${fishStr.split(',')[0]}`;
+  }
+
+  function renderCalendar() {
+    const year = parseInt(document.getElementById('cal-year').value);
+    const month = parseInt(document.getElementById('cal-month').value);
+    const body = document.getElementById('calendar-body');
+    body.innerHTML = '';
+
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    const lastDate = new Date(year, month, 0).getDate();
+
+    for(let i=0; i<firstDay; i++) {
+      let cell = document.createElement('div');
+      cell.className = 'cal-cell other-month';
+      body.appendChild(cell);
+    }
+
+    for(let d=1; d<=lastDate; d++) {
+      let mStr = month < 10 ? '0' + month : month;
+      let dStr = d < 10 ? '0' + d : d;
+      let dateKey = `${year}-${mStr}-${dStr}`;
+
+      let cell = document.createElement('div');
+      cell.className = 'cal-cell' + (dateKey === selectedDateStr ? ' selected' : '');
+      cell.onclick = () => selectDate(dateKey);
+
+      let numDiv = document.createElement('div');
+      numDiv.className = 'cell-num';
+      numDiv.innerText = d + '일';
+      cell.appendChild(numDiv);
+
+      if(dbData[dateKey]) {
+        let data = dbData[dateKey];
+        let totalCount = data.completed ? data.completed.reduce((a,b) => a + parseInt(b.count||0), 0) : 0;
+        
+        let isMaintenance = (data.statusText && data.statusText.includes("점검")) || totalCount === 0;
+
+        if (isMaintenance) {
+          let maintTag = document.createElement('span');
+          maintTag.className = 'badge-info tag-maintenance';
+          maintTag.innerText = `🛠️ 점검일`;
+          cell.appendChild(maintTag);
+        } else {
+          if(data.fish) {
+            let fishTag = document.createElement('span');
+            fishTag.className = 'badge-info tag-fish';
+            fishTag.innerText = getFishEmoji(data.fish);
+            cell.appendChild(fishTag);
+          }
+          
+          if(data.statusText) {
+            let statusTag = document.createElement('span');
+            statusTag.className = 'badge-info tag-status';
+            statusTag.innerText = `[${data.statusText}]`;
+            cell.appendChild(statusTag);
+          } else if(totalCount > 0) {
+            let countTag = document.createElement('span');
+            countTag.className = 'badge-info tag-count';
+            countTag.innerText = `예약: ${totalCount}명`;
+            cell.appendChild(countTag);
+          }
+        }
+      }
+
+      body.appendChild(cell);
+    }
+  }
+
+  function selectDate(dateKey) {
+    selectedDateStr = dateKey;
+    renderCalendar();
+    toggleEdit(false);
+    loadDateData(dateKey);
+  }
+
+  function loadDateData(dateKey) {
+    document.getElementById('selected-date-title').innerText = `📅 ${dateKey} 상세 정보`;
+    let data = dbData[dateKey] || { fish: '한치,오징어', water: '', price: 120000, location: '제주항 2부두', time: '18:30 ~ 04:30', notice: ' ', statusText: '', completed: [] };
+
+    document.getElementById('fish-type').value = data.fish || '';
+    document.getElementById('water-info').value = data.water || '';
+    document.getElementById('price-per-person').value = data.price || 120000;
+    document.getElementById('depart-location').value = data.location || '';
+    document.getElementById('depart-time').value = data.time || '';
+    
+    let noticeVal = (data.notice !== undefined && data.notice !== null && data.notice.trim() !== '') ? data.notice : ' ';
+    document.getElementById('notice-text').value = noticeVal;
+
+    let compTbody = document.getElementById('guest-completed-list');
+    compTbody.innerHTML = '';
+    (data.completed || []).forEach(g => {
+      if (!g.note || g.note.trim() === '') {
+        g.note = ' ';
+      }
+      addGuestRow('completed', g);
+    });
+
+    calculateSales();
+  }
+
+  function addGuestRow(type, data = {}) {
+    let tbody = document.getElementById('guest-completed-list');
+    let tr = document.createElement('tr');
+
+    let noteVal = (data.note !== undefined && data.note !== null && data.note.trim() !== '') ? data.note : ' ';
+
+    tr.innerHTML = `
+      <td><input type="text" class="form-control g-name" value="${data.name || ''}" disabled placeholder="이름"></td>
+      <td><input type="number" class="form-control g-count" value="${data.count || 1}" disabled oninput="calculateSales()"></td>
+      <td><input type="text" class="form-control g-note" value="${noteVal}" disabled placeholder="비고"></td>
+      <td><input type="number" class="form-control g-reel" value="${data.reel || 0}" disabled oninput="calculateSales()" placeholder="0"></td>
+      <td><input type="number" class="form-control g-rod" value="${data.rod || 0}" disabled oninput="calculateSales()" placeholder="0"></td>
+      <td><input type="text" class="form-control g-subtotal" value="0 원" disabled style="text-align:right; font-weight:bold; color:#1e40af;"></td>
+      <td class="edit-only" style="display:${document.getElementById('btn-save').style.display}; text-align:center;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); calculateSales();">X</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  function toggleEdit(isEdit) {
+    const inputs = document.querySelectorAll('#detail-form input, #detail-form select');
+    inputs.forEach(i => i.disabled = !isEdit);
+
+    document.querySelectorAll('.edit-only').forEach(el => el.style.display = isEdit ? 'block' : 'none');
+    document.querySelectorAll('td.edit-only, th.edit-only').forEach(el => el.style.display = isEdit ? 'table-cell' : 'none');
+    document.querySelectorAll('button.edit-only').forEach(el => el.style.display = isEdit ? 'inline-block' : 'none');
+
+    document.getElementById('btn-edit').style.display = isEdit ? 'none' : 'inline-block';
+    document.getElementById('btn-save').style.display = isEdit ? 'inline-block' : 'none';
+    document.getElementById('btn-cancel').style.display = isEdit ? 'inline-block' : 'none';
+
+    if(!isEdit) {
+      document.getElementById('ocr-status').innerText = '';
+      document.getElementById('image-input').value = '';
+    }
+  }
+
+  /* 📸 OCR 이미지 처리 엔진 */
+  function processCaptureImage(input) {
+    if (input.files && input.files[0]) {
+      const status = document.getElementById('ocr-status');
+      const targetDay = parseInt(selectedDateStr.split('-')[2]);
+      
+      status.innerText = `⏳ ${targetDay}일자 데이터를 분석하는 중...`;
+
+      Tesseract.recognize(
+        input.files[0],
+        'kor+eng',
+        { logger: m => console.log(m) }
+      ).then(({ data: { text } }) => {
+        parseSunsang24TextForDay(text, targetDay);
+        status.innerText = `✅ [${targetDay}일] 분석 완료!`;
+      }).catch(err => {
+        status.innerText = "❌ 이미지 분석 실패. 다시 시도해 주세요.";
+        console.error(err);
+      });
+    }
+  }
+
+  function parseSunsang24TextForDay(rawText, day) {
+    let cleanText = rawText.replace(/[\r\n]+/g, " ");
+    const dayRegex = new RegExp(`${day}\\s*일`, 'i');
+    const match = cleanText.match(dayRegex);
+    let dayBlockText = cleanText;
+
+    if (match) {
+      let afterDayText = cleanText.substring(match.index);
+      const nextDayRegex = new RegExp(`(${day + 1}|${day + 2})\\s*일`, 'i');
+      const nextMatch = afterDayText.substring(10).match(nextDayRegex);
+
+      if (nextMatch) {
+        dayBlockText = afterDayText.substring(0, nextMatch.index + 10);
+      } else {
+        dayBlockText = afterDayText;
+      }
+    }
+
+    let isMaintenanceText = dayBlockText.includes("점검일") || dayBlockText.includes("점검");
+    if (isMaintenanceText) {
+      document.getElementById('notice-text').value = "점검일";
+    }
+
+    const waterMatch = dayBlockText.match(/(\d+\s*물)/);
+    if (waterMatch) {
+      document.getElementById('water-info').value = waterMatch[1].replace(/\s+/g, '');
+    }
+
+    let compTbody = document.getElementById('guest-completed-list');
+    compTbody.innerHTML = '';
+
+    if (!isMaintenanceText && dayBlockText.includes("예약완료")) {
+      let parts = dayBlockText.split("예약완료");
+      let compSection = parts[1];
+
+      let compItems = compSection.split('/');
+      compItems.forEach(item => {
+        item = item.replace(/\s+/g, '');
+        if (!item) return;
+
+        let nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님(?:\((?:선비\s*:\s*)?([0-9]+)\))?(?:\(([^\)]+)\))?/);
+        
+        if (!nameMatch) {
+          nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?\(([^\)]+)\)/);
+        }
+
+        if (nameMatch) {
+          let name = nameMatch[1];
+          let param1 = nameMatch[2] || '';
+          let param2 = nameMatch[3] || '';
+
+          let count = 1;
+          let note = ' ';
+
+          if (/^\d+$/.test(param1)) {
+            count = parseInt(param1);
+            note = param2 ? param2 : ' ';
+          } else if (/^\d+$/.test(param2)) {
+            count = parseInt(param2);
+            note = param1 ? param1 : ' ';
+          } else {
+            let explicitNumMatch = item.match(/선비\s*:\s*(\d+)/);
+            if (explicitNumMatch) {
+              count = parseInt(explicitNumMatch[1]);
+              note = (param1 || param2) ? (param1 || param2) : ' ';
+            } else {
+              let combined = param1 ? (param2 ? `${param1} ${param2}` : param1) : (param2 ? param2 : ' ');
+              note = combined.trim() === '' ? ' ' : combined;
+            }
+          }
+
+          let reelCount = 0;
+          let rodCount = 0;
+
+          let reelM = item.match(/베이트릴\s*:\s*(\d+)/) || note.match(/베이트릴\s*:\s*(\d+)/);
+          if (reelM) reelCount = parseInt(reelM[1]);
+
+          let rodM = item.match(/낚시대\s*:\s*(\d+)/) || note.match(/낚시대\s*:\s*(\d+)/);
+          if (rodM) rodCount = parseInt(rodM[1]);
+
+          addGuestRow('completed', {
+            name: name,
+            count: count,
+            note: note,
+            reel: reelCount,
+            rod: rodCount
+          });
+        }
+      });
+    }
+
+    calculateSales();
+  }
+
+  function calculateSales() {
+    let price = parseInt(document.getElementById('price-per-person').value) || 0;
+    let totalCount = 0;
+    let totalSales = 0;
+
+    let rows = document.querySelectorAll('#guest-completed-list tr');
+    rows.forEach(r => {
+      let count = parseInt(r.querySelector('.g-count').value) || 0;
+      let reel = parseInt(r.querySelector('.g-reel').value) || 0;
+      let rod = parseInt(r.querySelector('.g-rod').value) || 0;
+
+      let personTotalFee = (count * price) + (reel * 10000) + (rod * 10000);
+      
+      r.querySelector('.g-subtotal').value = `${personTotalFee.toLocaleString()} 원`;
+
+      totalCount += count;
+      totalSales += personTotalFee;
+    });
+
+    document.getElementById('stat-count').innerText = `${totalCount} 명`;
+    document.getElementById('stat-total').innerText = `${totalSales.toLocaleString()} 원`;
+  }
+
+  function saveData() {
+    let completed = [];
+    document.querySelectorAll('#guest-completed-list tr').forEach(r => {
+      let noteVal = r.querySelector('.g-note').value;
+      if (!noteVal || noteVal.trim() === '') {
+        noteVal = ' ';
+      }
+      completed.push({
+        name: r.querySelector('.g-name').value,
+        count: parseInt(r.querySelector('.g-count').value) || 1,
+        note: noteVal,
+        reel: parseInt(r.querySelector('.g-reel').value) || 0,
+        rod: parseInt(r.querySelector('.g-rod').value) || 0
+      });
+    });
+
+    let noticeInput = document.getElementById('notice-text').value;
+    let finalNotice = (!noticeInput || noticeInput.trim() === '') ? ' ' : noticeInput;
+
+    dbData[selectedDateStr] = {
+      fish: document.getElementById('fish-type').value,
+      water: document.getElementById('water-info').value,
+      price: parseInt(document.getElementById('price-per-person').value) || 120000,
+      location: document.getElementById('depart-location').value,
+      time: document.getElementById('depart-time').value,
+      notice: finalNotice,
+      statusText: finalNotice.includes("점검") ? "점검일" : "",
+      completed: completed
+    };
+
+    toggleEdit(false);
+    renderCalendar();
+    saveToGoogleSheet();
+  }
+
+  // 📊 매출 통계 & 그래프 탭 로직 (막대 그래프 렌더링 적용)
+  function updateStatsView() {
+    const viewMode = document.getElementById('stats-view-mode').value;
+    const year = document.getElementById('stats-year-select').value;
+    const month = document.getElementById('stats-month-select').value;
+
+    const monthSelectEl = document.getElementById('stats-month-select');
+    if (viewMode === 'day') {
+      monthSelectEl.style.display = 'inline-block';
+    } else {
+      monthSelectEl.style.display = 'none';
+    }
+
+    let labels = [];
+    let salesData = [];
+    let totalPeriodSales = 0;
+    let totalPeriodGuests = 0;
+    let totalOptionSales = 0;
+
+    if (viewMode === 'year') {
+      labels = ['2024년', '2025년', '2026년', '2027년', '2028년', '2029년', '2030년'];
+      salesData = new Array(labels.length).fill(0);
+
+      Object.keys(dbData).forEach(dateStr => {
+        let y = dateStr.split('-')[0];
+        let yIdx = labels.findIndex(l => l.startsWith(y));
+        if (yIdx !== -1) {
+          let data = dbData[dateStr];
+          let basePrice = data.price || 120000;
+          let daySales = 0;
+          let dayGuests = 0;
+
+          (data.completed || []).forEach(g => {
+            let cnt = parseInt(g.count || 0);
+            let reel = parseInt(g.reel || 0);
+            let rod = parseInt(g.rod || 0);
+            let subtotal = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            let optTotal = (reel * 10000) + (rod * 10000);
+
+            daySales += subtotal;
+            dayGuests += cnt;
+            totalOptionSales += optTotal;
+          });
+
+          salesData[yIdx] += daySales;
+          totalPeriodSales += daySales;
+          totalPeriodGuests += dayGuests;
+        }
+      });
+      document.getElementById('sales-chart-title').innerText = "📊 년도별 총 매출액 막대 그래프 (단위: 원)";
+
+    } else if (viewMode === 'month') {
+      labels = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+      salesData = new Array(12).fill(0);
+
+      Object.keys(dbData).forEach(dateStr => {
+        let parts = dateStr.split('-');
+        let y = parts[0];
+        let m = parseInt(parts[1], 10);
+
+        if (y === year) {
+          let data = dbData[dateStr];
+          let basePrice = data.price || 120000;
+          let daySales = 0;
+          let dayGuests = 0;
+
+          (data.completed || []).forEach(g => {
+            let cnt = parseInt(g.count || 0);
+            let reel = parseInt(g.reel || 0);
+            let rod = parseInt(g.rod || 0);
+            let subtotal = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            let optTotal = (reel * 10000) + (rod * 10000);
+
+            daySales += subtotal;
+            dayGuests += cnt;
+            totalOptionSales += optTotal;
+          });
+
+          let mIdx = m - 1;
+          if (mIdx >= 0 && mIdx < 12) {
+            salesData[mIdx] += daySales;
+          }
+          totalPeriodSales += daySales;
+          totalPeriodGuests += dayGuests;
+        }
+      });
+      document.getElementById('sales-chart-title').innerText = `📊 ${year}년 월별 총 매출액 막대 그래프 (단위: 원)`;
+
+    } else {
+      let lastDay = new Date(year, month, 0).getDate();
+      labels = [];
+      for(let d=1; d<=lastDay; d++) {
+        labels.push(d + '일');
+      }
+      salesData = new Array(lastDay).fill(0);
+
+      let mStr = month < 10 ? '0' + month : month;
+      Object.keys(dbData).forEach(dateStr => {
+        let parts = dateStr.split('-');
+        let y = parts[0];
+        let m = parseInt(parts[1], 10);
+        let d = parseInt(parts[2], 10);
+
+        if (y === year && m === parseInt(month, 10)) {
+          let data = dbData[dateStr];
+          let basePrice = data.price || 120000;
+          let daySales = 0;
+          let dayGuests = 0;
+
+          (data.completed || []).forEach(g => {
+            let cnt = parseInt(g.count || 0);
+            let reel = parseInt(g.reel || 0);
+            let rod = parseInt(g.rod || 0);
+            let subtotal = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            let optTotal = (reel * 10000) + (rod * 10000);
+
+            daySales += subtotal;
+            dayGuests += cnt;
+            totalOptionSales += optTotal;
+          });
+
+          let dIdx = d - 1;
+          if (dIdx >= 0 && dIdx < lastDay) {
+            salesData[dIdx] += daySales;
+          }
+          totalPeriodSales += daySales;
+          totalPeriodGuests += dayGuests;
+        }
+      });
+      document.getElementById('sales-chart-title').innerText = `📊 ${year}년 ${month}월 일별 매출액 막대 그래프 (단위: 원)`;
+    }
+
+    // 상단 통계 요약 카드 반영
+    document.getElementById('year-total-sales').innerText = totalPeriodSales.toLocaleString() + ' 원';
+    document.getElementById('year-total-guests').innerText = totalPeriodGuests.toLocaleString() + ' 명';
+    document.getElementById('year-option-sales').innerText = totalOptionSales.toLocaleString() + ' 원';
+
+    // 매출액 막대 그래프(Bar Chart) 렌더링
+    const salesCtx = document.getElementById('salesChart').getContext('2d');
+    if (salesChartObj) salesChartObj.destroy();
+    salesChartObj = new Chart(salesCtx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '매출액 (원)',
+          data: salesData,
+          backgroundColor: '#2563eb',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  }
+</script>
+</body>
+</html>
