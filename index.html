@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>제주 배프로호 - 통합 예약 & 매출 통계 시스템</title>
+  <title>제주 배프로호 - 통합 예약 & 매출 & 지출 관리 시스템</title>
   <!-- OCR 라이브러리 -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <!-- 차트 그래프 라이브러리 -->
@@ -25,8 +25,8 @@
     header h1 { font-size: 1.35rem; }
     
     /* 탭 메뉴 */
-    .nav-tabs { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; justify-content: space-between; }
-    .nav-tabs-left { display: flex; gap: 10px; }
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    .nav-tabs-left { display: flex; gap: 10px; flex-wrap: wrap; }
     .tab-btn { padding: 10px 18px; font-weight: bold; border-radius: 8px; border: 1px solid var(--border-color); background: white; cursor: pointer; font-size: 0.9rem; }
     .tab-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
 
@@ -55,6 +55,7 @@
     .tag-count { background: #fef3c7; color: #b45309; font-weight: bold; }
     .tag-status { background: #fee2e2; color: #991b1b; font-weight: bold; }
     .tag-maintenance { background: #f3e8ff; color: #7e22ce; font-weight: bold; }
+    .tag-expense { background: #fee2e2; color: #b91c1c; font-weight: bold; }
 
     /* 상세 폼 스타일 */
     .form-group { margin-bottom: 10px; }
@@ -77,11 +78,14 @@
     .btn-danger { background: #dc2626; color: white; }
     .btn-sm { padding: 3px 6px; font-size: 0.72rem; }
 
-    /* 매출 요약 박스 */
+    /* 매출 및 지출 요약 박스 */
     .summary-card { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin-top: 10px; }
+    .summary-card.expense { background: #fff1f2; border: 1px solid #fecdd3; }
     .summary-card h4 { color: #166534; font-size: 0.88rem; margin-bottom: 5px; }
+    .summary-card.expense h4 { color: #9f1239; }
     .summary-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 3px; }
     .summary-row.total { font-weight: bold; font-size: 1.02rem; border-top: 1px solid #bbf7d0; padding-top: 5px; margin-top: 4px; color: #15803d; }
+    .summary-card.expense .summary-row.total { border-top: 1px solid #fecdd3; color: #be123c; }
 
     /* 통계 화면 스타일 */
     .stats-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px; }
@@ -98,7 +102,7 @@
 
 <div class="container">
   <header>
-    <h1>🚢 제주 배프로호 통합 예약 & 매출 관리</h1>
+    <h1>🚢 제주 배프로호 통합 예약 & 매출 & 지출 관리</h1>
     <div id="clock" style="font-size: 0.85rem; opacity: 0.9;"></div>
   </header>
 
@@ -106,7 +110,8 @@
   <div class="nav-tabs">
     <div class="nav-tabs-left">
       <button class="tab-btn active" onclick="switchTab('tab-daily', this)">📅 일별 예약/매출 관리</button>
-      <button class="tab-btn" onclick="switchTab('tab-stats', this)">📊 매출 통계 & 그래프</button>
+      <button class="tab-btn" onclick="switchTab('tab-expense', this)">💸 일별 지출 관리</button>
+      <button class="tab-btn" onclick="switchTab('tab-stats', this)">📊 통계 및 그래프</button>
     </div>
     <div>
       <span id="sync-badge" class="sync-status">☁️ 구글시트 연동 대기중</span>
@@ -114,7 +119,7 @@
     </div>
   </div>
 
-  <!-- TAB 1: 일별 관리 화면 -->
+  <!-- TAB 1: 일별 예약/매출 관리 화면 -->
   <div id="tab-daily" class="tab-content active">
     <!-- 위쪽: 달력 -->
     <div class="card">
@@ -175,7 +180,13 @@
 
         <div class="inline-grid-2">
           <div class="form-group">
-            <label>출항지 / 장소</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+              <label style="margin-bottom: 0;">출항지 / 장소</label>
+              <div class="edit-only" style="display:none;">
+                <button type="button" class="btn btn-warning btn-sm" onclick="setStatusTag('🛠️ 점검일')">🛠️ 점검일</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="setStatusTag('⛈️ 기상악화')">⛈️ 기상악화</button>
+              </div>
+            </div>
             <input type="text" id="depart-location" class="form-control" value="제주항 2부두" disabled>
           </div>
           <div class="form-group">
@@ -226,42 +237,190 @@
     </div>
   </div>
 
-  <!-- TAB 2: 매출 통계 & 그래프 화면 -->
+  <!-- TAB 2: 일별 지출 관리 화면 -->
+  <div id="tab-expense" class="tab-content">
+    <!-- 위쪽: 지출 달력 -->
+    <div class="card">
+      <div class="cal-header">
+        <div>
+          <select id="exp-cal-year" onchange="renderExpCalendar()"></select>
+          <select id="exp-cal-month" onchange="renderExpCalendar()"></select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="goExpToday()">오늘 날짜로</button>
+      </div>
+
+      <div class="calendar-grid" id="exp-calendar-head">
+        <div class="cal-day-head">일</div>
+        <div class="cal-day-head">월</div>
+        <div class="cal-day-head">화</div>
+        <div class="cal-day-head">수</div>
+        <div class="cal-day-head">목</div>
+        <div class="cal-day-head">금</div>
+        <div class="cal-day-head">토</div>
+      </div>
+      <div class="calendar-grid" id="exp-calendar-body" style="margin-top: 4px;"></div>
+    </div>
+
+    <!-- 아래쪽: 지출 상세 내역 및 입력 -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 id="selected-exp-date-title" style="color: #b91c1c;">📅 지출 날짜를 선택하세요</h3>
+        <div>
+          <button id="exp-btn-edit" class="btn btn-warning" onclick="toggleExpEdit(true)">✏️ 지출 수정하기</button>
+          <button id="exp-btn-save" class="btn btn-success" onclick="saveExpData()" style="display:none;">💾 지출 저장하기</button>
+          <button id="exp-btn-cancel" class="btn btn-danger" onclick="toggleExpEdit(false)" style="display:none;">취소</button>
+        </div>
+      </div>
+
+      <form id="expense-form">
+        <!-- 1. 식비 목록 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+          <h4 style="color: #2563eb; font-size:0.85rem;">🍽️ 식비 내역</h4>
+          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow('food')" style="display:none;">+ 식비 추가</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">내용</th>
+              <th style="width: 20%;">단가 (원)</th>
+              <th style="width: 15%;">수량</th>
+              <th style="width: 20%;">총 금액</th>
+              <th class="exp-edit-only" style="display:none; width:10%;">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="expense-food-list"></tbody>
+        </table>
+
+        <!-- 2. 선박수리 목록 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+          <h4 style="color: #7e22ce; font-size:0.85rem;">🛠️ 선박수리 내역</h4>
+          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow('repair')" style="display:none;">+ 수리비 추가</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">내용</th>
+              <th style="width: 20%;">단가 (원)</th>
+              <th style="width: 15%;">수량</th>
+              <th style="width: 20%;">총 금액</th>
+              <th class="exp-edit-only" style="display:none; width:10%;">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="expense-repair-list"></tbody>
+        </table>
+
+        <!-- 3. 기타 목록 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+          <h4 style="color: #c2410c; font-size:0.85rem;">📝 기타 지출 내역</h4>
+          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow('etc')" style="display:none;">+ 기타 지출 추가</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">내용 (직접 입력)</th>
+              <th style="width: 20%;">단가 (원)</th>
+              <th style="width: 15%;">수량</th>
+              <th style="width: 20%;">총 금액</th>
+              <th class="exp-edit-only" style="display:none; width:10%;">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="expense-etc-list"></tbody>
+        </table>
+
+        <!-- 당일 지출 요약 -->
+        <div class="summary-card expense">
+          <h4>💸 당일 지출 합계 요약</h4>
+          <div class="summary-row">
+            <span>식비 합계:</span>
+            <span id="exp-sum-food">0 원</span>
+          </div>
+          <div class="summary-row">
+            <span>선박수리 합계:</span>
+            <span id="exp-sum-repair">0 원</span>
+          </div>
+          <div class="summary-row">
+            <span>기타 지출 합계:</span>
+            <span id="exp-sum-etc">0 원</span>
+          </div>
+          <div class="summary-row total">
+            <span>당일 총 지출액:</span>
+            <span id="exp-sum-total">0 원</span>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TAB 3: 매출 통계 & 그래프 화면 -->
   <div id="tab-stats" class="tab-content" style="display: none;">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <h3>📊 월별 & 연도별 매출 통계 보고서</h3>
-        <div>
+        <h3>📊 매출 및 지출 통계 보고서</h3>
+        <div style="display: flex; gap: 8px;">
           <select id="stats-year-select" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px;">
             <option value="2026">2026년 통계</option>
             <option value="2025">2025년 통계</option>
+          </select>
+          <select id="stats-month-select" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px;">
+            <option value="all">전체 월 (월별)</option>
+            <option value="1">1월 일별</option>
+            <option value="2">2월 일별</option>
+            <option value="3">3월 일별</option>
+            <option value="4">4월 일별</option>
+            <option value="5">5월 일별</option>
+            <option value="6">6월 일별</option>
+            <option value="7" selected>7월 일별</option>
+            <option value="8">8월 일별</option>
+            <option value="9">9월 일별</option>
+            <option value="10">10월 일별</option>
+            <option value="11">11월 일별</option>
+            <option value="12">12월 일별</option>
           </select>
         </div>
       </div>
 
       <div class="stats-summary-grid">
         <div class="stat-box">
-          <h5>연도 총 매출액</h5>
+          <h5>선택 기간 총 매출액</h5>
           <div class="val" id="year-total-sales">0 원</div>
         </div>
         <div class="stat-box">
-          <h5>연도 총 승객 수</h5>
-          <div class="val" id="year-total-guests">0 명</div>
+          <h5>선택 기간 총 지출액</h5>
+          <div class="val" id="year-total-expense" style="color: #b91c1c;">0 원</div>
         </div>
         <div class="stat-box">
-          <h5>선비 외 대여/옵션 매출</h5>
-          <div class="val" id="year-option-sales" style="color: #16a34a;">0 원</div>
+          <h5>선택 기간 순수익 (매출-지출)</h5>
+          <div class="val" id="year-net-profit" style="color: #16a34a;">0 원</div>
         </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
-        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">📈 월별 총 매출액 추이 (단위: 원)</h4>
-          <canvas id="salesChart" height="200"></canvas>
+        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; height: 260px;">
+          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">📈 총 매출액 추이</h4>
+          <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="salesChart"></canvas>
+          </div>
         </div>
-        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">👥 월별 승객 수 추이 (단위: 명)</h4>
-          <canvas id="guestsChart" height="200"></canvas>
+        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; height: 260px;">
+          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">📉 총 지출액 추이</h4>
+          <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="expenseChart"></canvas>
+          </div>
+        </div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; height: 260px;">
+          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">👥 월별 승객 수 추이</h4>
+          <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="guestsChart"></canvas>
+          </div>
+        </div>
+        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; height: 260px;">
+          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">💰 순수익 그래프 (매출액 - 지출액)</h4>
+          <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="profitChart"></canvas>
+          </div>
         </div>
       </div>
     </div>
@@ -270,12 +429,15 @@
 
 <script>
   // 🔗 구글시트 웹앱 배포 URL
-  let WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywr_meg9xIEPmrGIfMoQHbjWCrkC7l1Mik07fTUtIYQdkw_oDzhyufDEVS0pAFuwAW2w/exec"; 
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywr_meg9xIEPmrGIfMoQHbjWCrkC7l1Mik07fTUtIYQdkw_oDzhyufDEVS0pAFuwAW2w/exec"; 
 
   let dbData = {}; 
   let selectedDateStr = '2026-07-06';
+  let selectedExpDateStr = '2026-07-06';
   let salesChartObj = null;
+  let expenseChartObj = null;
   let guestsChartObj = null;
+  let profitChartObj = null;
 
   dbData['2026-07-06'] = {
     fish: '한치,오징어', water: '14물', price: 120000, location: '제주항 2부두', time: '18:30 ~ 04:30', notice: ' ', statusText: '',
@@ -289,13 +451,20 @@
       { name: '차재수', count: 1, note: ' ', reel: 0, rod: 0 },
       { name: '정회훈', count: 2, note: ' ', reel: 0, rod: 0 },
       { name: '유성모', count: 2, note: ' ', reel: 0, rod: 0 }
-    ]
+    ],
+    expenses: {
+      food: [{ desc: '선원 식사', price: 15000, qty: 2 }],
+      repair: [],
+      etc: []
+    }
   };
 
   window.onload = function() {
     initYearMonthSelect();
     renderCalendar();
+    renderExpCalendar();
     loadDateData(selectedDateStr);
+    loadExpDateData(selectedExpDateStr);
     syncWithGoogleSheet();
   };
 
@@ -321,7 +490,9 @@
         badge.style.background = "#dcfce7";
         badge.style.color = "#166534";
         renderCalendar();
+        renderExpCalendar();
         loadDateData(selectedDateStr);
+        loadExpDateData(selectedExpDateStr);
         if(document.getElementById('tab-stats').classList.contains('active')) {
           updateStatsView();
         }
@@ -378,19 +549,31 @@
   function initYearMonthSelect() {
     const yearSel = document.getElementById('cal-year');
     const monthSel = document.getElementById('cal-month');
+    const expYearSel = document.getElementById('exp-cal-year');
+    const expMonthSel = document.getElementById('exp-cal-month');
     
     for(let y = 2024; y <= 2030; y++) {
-      let opt = document.createElement('option');
-      opt.value = y; opt.innerText = y + '년';
-      if(y === 2026) opt.selected = true;
-      yearSel.appendChild(opt);
+      let opt1 = document.createElement('option');
+      opt1.value = y; opt1.innerText = y + '년';
+      if(y === 2026) opt1.selected = true;
+      yearSel.appendChild(opt1);
+
+      let opt2 = document.createElement('option');
+      opt2.value = y; opt2.innerText = y + '년';
+      if(y === 2026) opt2.selected = true;
+      expYearSel.appendChild(opt2);
     }
     
     for(let m = 1; m <= 12; m++) {
-      let opt = document.createElement('option');
-      opt.value = m; opt.innerText = m + '월';
-      if(m === 7) opt.selected = true;
-      monthSel.appendChild(opt);
+      let opt1 = document.createElement('option');
+      opt1.value = m; opt1.innerText = m + '월';
+      if(m === 7) opt1.selected = true;
+      monthSel.appendChild(opt1);
+
+      let opt2 = document.createElement('option');
+      opt2.value = m; opt2.innerText = m + '월';
+      if(m === 7) opt2.selected = true;
+      expMonthSel.appendChild(opt2);
     }
   }
 
@@ -411,6 +594,23 @@
     loadDateData(selectedDateStr);
   }
 
+  function goExpToday() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = today.getMonth() + 1;
+    const d = today.getDate();
+    
+    document.getElementById('exp-cal-year').value = y;
+    document.getElementById('exp-cal-month').value = m;
+    
+    let mStr = m < 10 ? '0' + m : m;
+    let dStr = d < 10 ? '0' + d : d;
+    selectedExpDateStr = `${y}-${mStr}-${dStr}`;
+    
+    renderExpCalendar();
+    loadExpDateData(selectedExpDateStr);
+  }
+
   function getFishEmoji(fishStr) {
     if(!fishStr) return '';
     if(fishStr.includes('한치') || fishStr.includes('오징어')) return '🦑 한치';
@@ -420,6 +620,7 @@
     return `🐟 ${fishStr.split(',')[0]}`;
   }
 
+  /* 예약 달력 렌더링 */
   function renderCalendar() {
     const year = parseInt(document.getElementById('cal-year').value);
     const month = parseInt(document.getElementById('cal-month').value);
@@ -455,10 +656,15 @@
         
         let isMaintenance = (data.statusText && data.statusText.includes("점검")) || totalCount === 0;
 
-        if (isMaintenance) {
+        if (data.statusText) {
+          let statusTag = document.createElement('span');
+          statusTag.className = 'badge-info tag-status';
+          statusTag.innerText = `[${data.statusText}]`;
+          cell.appendChild(statusTag);
+        } else if (isMaintenance) {
           let maintTag = document.createElement('span');
           maintTag.className = 'badge-info tag-maintenance';
-          maintTag.innerText = `🛠️ 점검일`;
+          maintTag.innerText = `❣️ 휴가`;
           cell.appendChild(maintTag);
         } else {
           if(data.fish) {
@@ -468,12 +674,7 @@
             cell.appendChild(fishTag);
           }
           
-          if(data.statusText) {
-            let statusTag = document.createElement('span');
-            statusTag.className = 'badge-info tag-status';
-            statusTag.innerText = `[${data.statusText}]`;
-            cell.appendChild(statusTag);
-          } else if(totalCount > 0) {
+          if(totalCount > 0) {
             let countTag = document.createElement('span');
             countTag.className = 'badge-info tag-count';
             countTag.innerText = `예약: ${totalCount}명`;
@@ -486,11 +687,67 @@
     }
   }
 
+  /* 지출 달력 렌더링 */
+  function renderExpCalendar() {
+    const year = parseInt(document.getElementById('exp-cal-year').value);
+    const month = parseInt(document.getElementById('exp-cal-month').value);
+    const body = document.getElementById('exp-calendar-body');
+    body.innerHTML = '';
+
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    const lastDate = new Date(year, month, 0).getDate();
+
+    for(let i=0; i<firstDay; i++) {
+      let cell = document.createElement('div');
+      cell.className = 'cal-cell other-month';
+      body.appendChild(cell);
+    }
+
+    for(let d=1; d<=lastDate; d++) {
+      let mStr = month < 10 ? '0' + month : month;
+      let dStr = d < 10 ? '0' + d : d;
+      let dateKey = `${year}-${mStr}-${dStr}`;
+
+      let cell = document.createElement('div');
+      cell.className = 'cal-cell' + (dateKey === selectedExpDateStr ? ' selected' : '');
+      cell.onclick = () => selectExpDate(dateKey);
+
+      let numDiv = document.createElement('div');
+      numDiv.className = 'cell-num';
+      numDiv.innerText = d + '일';
+      cell.appendChild(numDiv);
+
+      if(dbData[dateKey] && dbData[dateKey].expenses) {
+        let exp = dbData[dateKey].expenses;
+        let foodSum = (exp.food || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+        let repairSum = (exp.repair || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+        let etcSum = (exp.etc || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+        let totalExp = foodSum + repairSum + etcSum;
+
+        if(totalExp > 0) {
+          let expTag = document.createElement('span');
+          expTag.className = 'badge-info tag-expense';
+          expTag.innerText = `지출: ${totalExp.toLocaleString()}원`;
+          cell.appendChild(expTag);
+        }
+      }
+
+      body.appendChild(cell);
+    }
+  }
+
   function selectDate(dateKey) {
     selectedDateStr = dateKey;
     renderCalendar();
     toggleEdit(false);
     loadDateData(dateKey);
+  }
+
+  function selectExpDate(dateKey) {
+    selectedExpDateStr = dateKey;
+    renderExpCalendar();
+    toggleExpEdit(false);
+    loadExpDateData(dateKey);
   }
 
   function loadDateData(dateKey) {
@@ -518,6 +775,34 @@
     calculateSales();
   }
 
+  function loadExpDateData(dateKey) {
+    document.getElementById('selected-exp-date-title').innerText = `📅 ${dateKey} 지출 상세 내역`;
+    let data = dbData[dateKey] || {};
+    let expenses = data.expenses || { food: [], repair: [], etc: [] };
+
+    document.getElementById('expense-food-list').innerHTML = '';
+    document.getElementById('expense-repair-list').innerHTML = '';
+    document.getElementById('expense-etc-list').innerHTML = '';
+
+    (expenses.food || []).forEach(item => addExpenseRow('food', item));
+    (expenses.repair || []).forEach(item => addExpenseRow('repair', item));
+    (expenses.etc || []).forEach(item => addExpenseRow('etc', item));
+
+    calculateExpenses();
+  }
+
+  function setStatusTag(statusName) {
+    document.getElementById('notice-text').value = statusName;
+    if(!dbData[selectedDateStr]) {
+      dbData[selectedDateStr] = { fish: document.getElementById('fish-type').value, water: document.getElementById('water-info').value, price: parseInt(document.getElementById('price-per-person').value) || 120000, location: document.getElementById('depart-location').value, time: document.getElementById('depart-time').value, notice: statusName, statusText: statusName, completed: [] };
+    } else {
+      dbData[selectedDateStr].statusText = statusName;
+      dbData[selectedDateStr].notice = statusName;
+    }
+    renderCalendar();
+    saveToGoogleSheet();
+  }
+
   function addGuestRow(type, data = {}) {
     let tbody = document.getElementById('guest-completed-list');
     let tr = document.createElement('tr');
@@ -538,6 +823,27 @@
     tbody.appendChild(tr);
   }
 
+  function addExpenseRow(category, data = {}) {
+    let tbodyId = category === 'food' ? 'expense-food-list' : (category === 'repair' ? 'expense-repair-list' : 'expense-etc-list');
+    let tbody = document.getElementById(tbodyId);
+    let tr = document.createElement('tr');
+
+    let descPlaceholder = category === 'food' ? '예: 떡볶이' : (category === 'repair' ? '예: 엔진 부품' : '예: 내용 직접 입력');
+    let isEditMode = document.getElementById('exp-btn-save').style.display !== 'none';
+
+    tr.innerHTML = `
+      <td><input type="text" class="form-control exp-desc" value="${data.desc || ''}" ${isEditMode ? '' : 'disabled'} placeholder="${descPlaceholder}"></td>
+      <td><input type="number" class="form-control exp-price" value="${data.price || 0}" ${isEditMode ? '' : 'disabled'} oninput="calculateExpenses()" placeholder="0"></td>
+      <td><input type="number" class="form-control exp-qty" value="${data.qty || 1}" ${isEditMode ? '' : 'disabled'} oninput="calculateExpenses()" placeholder="1"></td>
+      <td><input type="text" class="form-control exp-subtotal" value="0 원" disabled style="text-align:right; font-weight:bold; color:#b91c1c;"></td>
+      <td class="exp-edit-only" style="display:${isEditMode ? 'table-cell' : 'none'}; text-align:center;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); calculateExpenses();">X</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+    calculateExpenses();
+  }
+
   function toggleEdit(isEdit) {
     const inputs = document.querySelectorAll('#detail-form input, #detail-form select');
     inputs.forEach(i => i.disabled = !isEdit);
@@ -549,7 +855,7 @@
     document.getElementById('btn-edit').style.display = isEdit ? 'none' : 'inline-block';
     document.getElementById('btn-save').style.display = isEdit ? 'inline-block' : 'none';
     document.getElementById('btn-delete').style.display = isEdit ? 'inline-block' : 'none';
-    document.getElementById('btn-cancel').style.display = isEdit ? 'inline-block' : 'none';
+    document.getElementById('btn-cancel').style.display = isEdit ? 'none' : 'inline-block';
 
     if(!isEdit) {
       document.getElementById('ocr-status').innerText = '';
@@ -557,7 +863,24 @@
     }
   }
 
-  /* 📸 OCR 이미지 처리 엔진 (유연하게 개선됨) */
+  function toggleExpEdit(isEdit) {
+    const inputs = document.querySelectorAll('#expense-form input');
+    inputs.forEach(i => i.disabled = !isEdit);
+
+    document.querySelectorAll('.exp-edit-only').forEach(el => {
+      if (el.tagName === 'TD' || el.tagName === 'TH') {
+        el.style.display = isEdit ? 'table-cell' : 'none';
+      } else {
+        el.style.display = isEdit ? 'inline-block' : 'none';
+      }
+    });
+
+    document.getElementById('exp-btn-edit').style.display = isEdit ? 'none' : 'inline-block';
+    document.getElementById('exp-btn-save').style.display = isEdit ? 'inline-block' : 'none';
+    document.getElementById('exp-btn-cancel').style.display = isEdit ? 'none' : 'inline-block';
+  }
+
+  /* 📸 OCR 이미지 처리 엔진 */
   function processCaptureImage(input) {
     if (input.files && input.files[0]) {
       const status = document.getElementById('ocr-status');
@@ -580,15 +903,10 @@
   }
 
   function parseSunsang24TextForDay(rawText, day) {
-    // 콘솔에서 OCR 전체 텍스트 확인 가능 (디버깅용)
-    console.log("=== OCR Raw Text ===", rawText);
-
-    let cleanText = rawText.replace(/[\r\n]+/g, "\n");
-    let dayBlockText = cleanText;
-
-    // 1단계: 날짜 블록 찾기 시도 (없으면 전체 텍스트 대상)
+    let cleanText = rawText.replace(/[\r\n]+/g, " ");
     const dayRegex = new RegExp(`${day}\\s*일`, 'i');
     const match = cleanText.match(dayRegex);
+    let dayBlockText = cleanText;
 
     if (match) {
       let afterDayText = cleanText.substring(match.index);
@@ -602,13 +920,11 @@
       }
     }
 
-    // 점검일 체크
     let isMaintenanceText = dayBlockText.includes("점검일") || dayBlockText.includes("점검");
     if (isMaintenanceText) {
       document.getElementById('notice-text').value = "점검일";
     }
 
-    // 물때 정보 추출
     const waterMatch = dayBlockText.match(/(\d+\s*물)/);
     if (waterMatch) {
       document.getElementById('water-info').value = waterMatch[1].replace(/\s+/g, '');
@@ -617,72 +933,65 @@
     let compTbody = document.getElementById('guest-completed-list');
     compTbody.innerHTML = '';
 
-    // 2단계: '예약완료' 키워드가 있든 없든 손님 목록 라인을 유연하게 파싱
-    let targetSection = dayBlockText;
-    if (dayBlockText.includes("예약완료")) {
-      targetSection = dayBlockText.split("예약완료")[1];
-    }
+    if (!isMaintenanceText && dayBlockText.includes("예약완료")) {
+      let parts = dayBlockText.split("예약완료");
+      let compSection = parts[1];
 
-    // 슬래시(/) 또는 줄바꿈(\n) 단위로 쪼개기
-    let compItems = targetSection.split(/[\/\n]/);
+      let compItems = compSection.split('/');
+      compItems.forEach(item => {
+        item = item.replace(/\s+/g, '');
+        if (!item) return;
 
-    compItems.forEach(item => {
-      item = item.trim();
-      if (!item) return;
-
-      // '님' 글자를 포함하거나 이름 형태인 경우 추출 시도
-      let nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?(?:\((?:선비\s*:\s*)?([0-9]+)\))?(?:\(([^\)]+)\))?/);
-      
-      if (!nameMatch) {
-        nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?\s*([0-9]+)?명?/);
-      }
-
-      if (nameMatch && nameMatch[1]) {
-        let name = nameMatch[1];
-        // '일', '월', '물' 등 달력 날짜 관련 단어가 이름으로 잘못 잡히는 것 방지
-        if (name.includes('일') && name.replace(/[^0-9]/g, '') == day) return;
-
-        let param1 = nameMatch[2] || '';
-        let param2 = nameMatch[3] || '';
-
-        let count = 1;
-        let note = ' ';
-
-        if (/^\d+$/.test(param1)) {
-          count = parseInt(param1);
-          note = param2 ? param2 : ' ';
-        } else if (/^\d+$/.test(param2)) {
-          count = parseInt(param2);
-          note = param1 ? param1 : ' ';
-        } else {
-          let explicitNumMatch = item.match(/선비\s*:\s*(\d+)/) || item.match(/(\d+)명/);
-          if (explicitNumMatch) {
-            count = parseInt(explicitNumMatch[1]);
-            note = (param1 || param2) ? (param1 || param2) : ' ';
-          } else {
-            let combined = param1 ? (param2 ? `${param1} ${param2}` : param1) : (param2 ? param2 : ' ');
-            note = combined.trim() === '' ? ' ' : combined;
-          }
+        let nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님(?:\((?:선비\s*:\s*)?([0-9]+)\))?(?:\(([^\)]+)\))?/);
+        
+        if (!nameMatch) {
+          nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?\(([^\)]+)\)/);
         }
 
-        let reelCount = 0;
-        let rodCount = 0;
+        if (nameMatch) {
+          let name = nameMatch[1];
+          let param1 = nameMatch[2] || '';
+          let param2 = nameMatch[3] || '';
 
-        let reelM = item.match(/베이트릴\s*[:\s]*(\d+)/) || note.match(/베이트릴\s*[:\s]*(\d+)/);
-        if (reelM) reelCount = parseInt(reelM[1]);
+          let count = 1;
+          let note = ' ';
 
-        let rodM = item.match(/낚시대\s*[:\s]*(\d+)/) || note.match(/낚시대\s*[:\s]*(\d+)/);
-        if (rodM) rodCount = parseInt(rodM[1]);
+          if (/^\d+$/.test(param1)) {
+            count = parseInt(param1);
+            note = param2 ? param2 : ' ';
+          } else if (/^\d+$/.test(param2)) {
+            count = parseInt(param2);
+            note = param1 ? param1 : ' ';
+          } else {
+            let explicitNumMatch = item.match(/선비\s*:\s*(\d+)/);
+            if (explicitNumMatch) {
+              count = parseInt(explicitNumMatch[1]);
+              note = (param1 || param2) ? (param1 || param2) : ' ';
+            } else {
+              let combined = param1 ? (param2 ? `${param1} ${param2}` : param1) : (param2 ? param2 : ' ');
+              note = combined.trim() === '' ? ' ' : combined;
+            }
+          }
 
-        addGuestRow('completed', {
-          name: name,
-          count: count,
-          note: note,
-          reel: reelCount,
-          rod: rodCount
-        });
-      }
-    });
+          let reelCount = 0;
+          let rodCount = 0;
+
+          let reelM = item.match(/베이트릴\s*:\s*(\d+)/) || note.match(/베이트릴\s*:\s*(\d+)/);
+          if (reelM) reelCount = parseInt(reelM[1]);
+
+          let rodM = item.match(/낚시대\s*:\s*(\d+)/) || note.match(/낚시대\s*:\s*(\d+)/);
+          if (rodM) rodCount = parseInt(rodM[1]);
+
+          addGuestRow('completed', {
+            name: name,
+            count: count,
+            note: note,
+            reel: reelCount,
+            rod: rodCount
+          });
+        }
+      });
+    }
 
     calculateSales();
   }
@@ -710,6 +1019,43 @@
     document.getElementById('stat-total').innerText = `${totalSales.toLocaleString()} 원`;
   }
 
+  function calculateExpenses() {
+    let foodSum = 0;
+    let repairSum = 0;
+    let etcSum = 0;
+
+    document.querySelectorAll('#expense-food-list tr').forEach(r => {
+      let price = parseInt(r.querySelector('.exp-price').value) || 0;
+      let qty = parseInt(r.querySelector('.exp-qty').value) || 0;
+      let sub = price * qty;
+      r.querySelector('.exp-subtotal').value = `${sub.toLocaleString()} 원`;
+      foodSum += sub;
+    });
+
+    document.querySelectorAll('#expense-repair-list tr').forEach(r => {
+      let price = parseInt(r.querySelector('.exp-price').value) || 0;
+      let qty = parseInt(r.querySelector('.exp-qty').value) || 0;
+      let sub = price * qty;
+      r.querySelector('.exp-subtotal').value = `${sub.toLocaleString()} 원`;
+      repairSum += sub;
+    });
+
+    document.querySelectorAll('#expense-etc-list tr').forEach(r => {
+      let price = parseInt(r.querySelector('.exp-price').value) || 0;
+      let qty = parseInt(r.querySelector('.exp-qty').value) || 0;
+      let sub = price * qty;
+      r.querySelector('.exp-subtotal').value = `${sub.toLocaleString()} 원`;
+      etcSum += sub;
+    });
+
+    let totalExp = foodSum + repairSum + etcSum;
+
+    document.getElementById('exp-sum-food').innerText = `${foodSum.toLocaleString()} 원`;
+    document.getElementById('exp-sum-repair').innerText = `${repairSum.toLocaleString()} 원`;
+    document.getElementById('exp-sum-etc').innerText = `${etcSum.toLocaleString()} 원`;
+    document.getElementById('exp-sum-total').innerText = `${totalExp.toLocaleString()} 원`;
+  }
+
   function saveData() {
     let completed = [];
     document.querySelectorAll('#guest-completed-list tr').forEach(r => {
@@ -729,27 +1075,73 @@
     let noticeInput = document.getElementById('notice-text').value;
     let finalNotice = (!noticeInput || noticeInput.trim() === '') ? ' ' : noticeInput;
 
-    dbData[selectedDateStr] = {
-      fish: document.getElementById('fish-type').value,
-      water: document.getElementById('water-info').value,
-      price: parseInt(document.getElementById('price-per-person').value) || 120000,
-      location: document.getElementById('depart-location').value,
-      time: document.getElementById('depart-time').value,
-      notice: finalNotice,
-      statusText: finalNotice.includes("점검") ? "점검일" : "",
-      completed: completed
-    };
+    let currentStatusText = "";
+    if (finalNotice.includes("🛠️ 점검일")) currentStatusText = "🛠️ 점검일";
+    else if (finalNotice.includes("⛈️ 기상악화")) currentStatusText = "⛈️ 기상악화";
+
+    if(!dbData[selectedDateStr]) dbData[selectedDateStr] = {};
+
+    dbData[selectedDateStr].fish = document.getElementById('fish-type').value;
+    dbData[selectedDateStr].water = document.getElementById('water-info').value;
+    dbData[selectedDateStr].price = parseInt(document.getElementById('price-per-person').value) || 120000;
+    dbData[selectedDateStr].location = document.getElementById('depart-location').value;
+    dbData[selectedDateStr].time = document.getElementById('depart-time').value;
+    dbData[selectedDateStr].notice = finalNotice;
+    dbData[selectedDateStr].statusText = currentStatusText;
+    dbData[selectedDateStr].completed = completed;
 
     toggleEdit(false);
     renderCalendar();
     saveToGoogleSheet();
   }
 
-  // 해당 일자 데이터 전체 삭제 기능
+  function saveExpData() {
+    let foodList = [];
+    document.querySelectorAll('#expense-food-list tr').forEach(r => {
+      foodList.push({
+        desc: r.querySelector('.exp-desc').value,
+        price: parseInt(r.querySelector('.exp-price').value) || 0,
+        qty: parseInt(r.querySelector('.exp-qty').value) || 0
+      });
+    });
+
+    let repairList = [];
+    document.querySelectorAll('#expense-repair-list tr').forEach(r => {
+      repairList.push({
+        desc: r.querySelector('.exp-desc').value,
+        price: parseInt(r.querySelector('.exp-price').value) || 0,
+        qty: parseInt(r.querySelector('.exp-qty').value) || 0
+      });
+    });
+
+    let etcList = [];
+    document.querySelectorAll('#expense-etc-list tr').forEach(r => {
+      etcList.push({
+        desc: r.querySelector('.exp-desc').value,
+        price: parseInt(r.querySelector('.exp-price').value) || 0,
+        qty: parseInt(r.querySelector('.exp-qty').value) || 0
+      });
+    });
+
+    if(!dbData[selectedExpDateStr]) dbData[selectedExpDateStr] = {};
+
+    dbData[selectedExpDateStr].expenses = {
+      food: foodList,
+      repair: repairList,
+      etc: etcList
+    };
+
+    toggleExpEdit(false);
+    renderExpCalendar();
+    saveToGoogleSheet();
+  }
+
+  // 해당 일자 예약 데이터 전체 삭제 기능
   function deleteDateData() {
-    if (confirm(`${selectedDateStr} 일자의 모든 데이터를 삭제하시겠습니까?`)) {
+    if (confirm(`${selectedDateStr} 일자의 예약 데이터를 삭제하시겠습니까?`)) {
       if (dbData[selectedDateStr]) {
-        delete dbData[selectedDateStr];
+        delete dbData[selectedDateStr].completed;
+        delete dbData[selectedDateStr].statusText;
       }
       toggleEdit(false);
       renderCalendar();
@@ -760,93 +1152,177 @@
 
   function updateStatsView() {
     const year = document.getElementById('stats-year-select').value;
-    let monthlySales = new Array(12).fill(0);
-    let monthlyGuests = new Array(12).fill(0);
-    let totalYearSales = 0;
-    let totalYearGuests = 0;
-    let totalOptionSales = 0;
+    const monthSelectVal = document.getElementById('stats-month-select').value;
 
+    let labels = [];
+    let salesData = [];
+    let expenseData = [];
+    let profitData = [];
+    let monthlyGuests = new Array(12).fill(0);
+
+    let totalPeriodSales = 0;
+    let totalPeriodExpenses = 0;
+    let totalYearGuests = 0;
+
+    // 월별 승객 수 추이 데이터 항상 계산 (전체 연도 기준)
     Object.keys(dbData).forEach(dateStr => {
       if(dateStr.startsWith(year)) {
         let monthIdx = parseInt(dateStr.split('-')[1]) - 1;
         let data = dbData[dateStr];
-        
-        let daySales = 0;
         let dayGuests = 0;
-        let basePrice = data.price || 120000;
-
         (data.completed || []).forEach(g => {
-          let cnt = parseInt(g.count || 0);
-          let reel = parseInt(g.reel || 0);
-          let rod = parseInt(g.rod || 0);
-          
-          let sub = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
-          let optSub = (reel * 10000) + (rod * 10000);
-
-          daySales += sub;
-          dayGuests += cnt;
-          totalOptionSales += optSub;
+          dayGuests += parseInt(g.count || 0);
         });
-
         if(monthIdx >= 0 && monthIdx < 12) {
-          monthlySales[monthIdx] += daySales;
           monthlyGuests[monthIdx] += dayGuests;
         }
-        totalYearSales += daySales;
         totalYearGuests += dayGuests;
       }
     });
 
-    document.getElementById('year-total-sales').innerText = `${totalYearSales.toLocaleString()} 원`;
-    document.getElementById('year-total-guests').innerText = `${totalYearGuests.toLocaleString()} 명`;
-    document.getElementById('year-option-sales').innerText = `${totalOptionSales.toLocaleString()} 원`;
+    if (monthSelectVal === 'all') {
+      // 월별 집계 보기
+      labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+      salesData = new Array(12).fill(0);
+      expenseData = new Array(12).fill(0);
+      profitData = new Array(12).fill(0);
 
-    renderCharts(monthlySales, monthlyGuests);
-  }
+      Object.keys(dbData).forEach(dateStr => {
+        if(dateStr.startsWith(year)) {
+          let monthIdx = parseInt(dateStr.split('-')[1]) - 1;
+          let data = dbData[dateStr];
+          
+          let daySales = 0;
+          let basePrice = data.price || 120000;
+          (data.completed || []).forEach(g => {
+            let cnt = parseInt(g.count || 0);
+            let reel = parseInt(g.reel || 0);
+            let rod = parseInt(g.rod || 0);
+            daySales += (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+          });
 
-  function renderCharts(monthlySales, monthlyGuests) {
-    const monthsLabel = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+          let dayExpense = 0;
+          if(data.expenses) {
+            let exp = data.expenses;
+            let fSum = (exp.food || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+            let rSum = (exp.repair || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+            let eSum = (exp.etc || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+            dayExpense = fSum + rSum + eSum;
+          }
 
-    if(salesChartObj) salesChartObj.destroy();
+          if(monthIdx >= 0 && monthIdx < 12) {
+            salesData[monthIdx] += daySales;
+            expenseData[monthIdx] += dayExpense;
+          }
+          totalPeriodSales += daySales;
+          totalPeriodExpenses += dayExpense;
+        }
+      });
+      for(let i=0; i<12; i++) {
+        profitData[i] = salesData[i] - expenseData[i];
+      }
+    } else {
+      // 특정 월의 일별 집계 보기
+      let m = parseInt(monthSelectVal);
+      let lastDate = new Date(parseInt(year), m, 0).getDate();
+      
+      salesData = new Array(lastDate).fill(0);
+      expenseData = new Array(lastDate).fill(0);
+      profitData = new Array(lastDate).fill(0);
+      for(let d = 1; d <= lastDate; d++) {
+        labels.push(d + '일');
+      }
+
+      for(let d = 1; d <= lastDate; d++) {
+        let mStr = m < 10 ? '0' + m : m;
+        let dStr = d < 10 ? '0' + d : d;
+        let dateKey = `${year}-${mStr}-${dStr}`;
+
+        let data = dbData[dateKey];
+        if(data) {
+          let daySales = 0;
+          let basePrice = data.price || 120000;
+          (data.completed || []).forEach(g => {
+            let cnt = parseInt(g.count || 0);
+            let reel = parseInt(g.reel || 0);
+            let rod = parseInt(g.rod || 0);
+            daySales += (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+          });
+
+          let dayExpense = 0;
+          if(data.expenses) {
+            let exp = data.expenses;
+            let fSum = (exp.food || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+            let rSum = (exp.repair || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+            let eSum = (exp.etc || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
+            dayExpense = fSum + rSum + eSum;
+          }
+
+          salesData[d - 1] = daySales;
+          expenseData[d - 1] = dayExpense;
+          profitData[d - 1] = daySales - dayExpense;
+
+          totalPeriodSales += daySales;
+          totalPeriodExpenses += dayExpense;
+        }
+      }
+    }
+
+    let netProfit = totalPeriodSales - totalPeriodExpenses;
+
+    document.getElementById('year-total-sales').innerText = `${totalPeriodSales.toLocaleString()} 원`;
+    document.getElementById('year-total-expense').innerText = `${totalPeriodExpenses.toLocaleString()} 원`;
+    document.getElementById('year-net-profit').innerText = `${netProfit.toLocaleString()} 원`;
+
+    const commonOptions = { responsive: true, maintainAspectRatio: false };
+
+    // 1. 매출액 그래프 (파스텔 블루)
     const ctxSales = document.getElementById('salesChart').getContext('2d');
+    if(salesChartObj) salesChartObj.destroy();
     salesChartObj = new Chart(ctxSales, {
       type: 'bar',
       data: {
-        labels: monthsLabel,
-        datasets: [{
-          label: '월별 매출액',
-          data: monthlySales,
-          backgroundColor: '#2563eb',
-          borderRadius: 4
-        }]
+        labels: labels,
+        datasets: [{ label: '매출액', data: salesData, backgroundColor: '#93c5fd' }]
       },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } }
-      }
+      options: commonOptions
     });
 
-    if(guestsChartObj) guestsChartObj.destroy();
+    // 2. 지출액 그래프 (파스텔 핑크)
+    const ctxExpense = document.getElementById('expenseChart').getContext('2d');
+    if(expenseChartObj) expenseChartObj.destroy();
+    expenseChartObj = new Chart(ctxExpense, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{ label: '지출액', data: expenseData, backgroundColor: '#fbcfe8' }]
+      },
+      options: commonOptions
+    });
+
+    // 3. 월별 승객 수 추이 (기존 유지)
     const ctxGuests = document.getElementById('guestsChart').getContext('2d');
+    if(guestsChartObj) guestsChartObj.destroy();
     guestsChartObj = new Chart(ctxGuests, {
       type: 'line',
       data: {
-        labels: monthsLabel,
-        datasets: [{
-          label: '월별 승객 수',
-          data: monthlyGuests,
-          borderColor: '#16a34a',
-          backgroundColor: 'rgba(22, 163, 74, 0.1)',
-          fill: true,
-          tension: 0.2
-        }]
+        labels: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+        datasets: [{ label: '월별 승객수', data: monthlyGuests, borderColor: '#16a34a', backgroundColor: '#dcfce7', fill: true }]
       },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } }
-      }
+      options: commonOptions
+    });
+
+    // 4. 순수익 그래프 (플러스: 파스텔 그린, 마이너스: 파스텔 레드)
+    const profitColors = profitData.map(val => val >= 0 ? '#86efac' : '#fca5a5');
+    const ctxProfit = document.getElementById('profitChart').getContext('2d');
+    if(profitChartObj) profitChartObj.destroy();
+    profitChartObj = new Chart(ctxProfit, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{ label: '순수익 (매출-지출)', data: profitData, backgroundColor: profitColors }]
+      },
+      options: commonOptions
     });
   }
 </script>
