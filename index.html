@@ -270,7 +270,7 @@
 
 <script>
   // 🔗 구글시트 웹앱 배포 URL
-  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywr_meg9xIEPmrGIfMoQHbjWCrkC7l1Mik07fTUtIYQdkw_oDzhyufDEVS0pAFuwAW2w/exec"; 
+  let WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywr_meg9xIEPmrGIfMoQHbjWCrkC7l1Mik07fTUtIYQdkw_oDzhyufDEVS0pAFuwAW2w/exec"; 
 
   let dbData = {}; 
   let selectedDateStr = '2026-07-06';
@@ -557,7 +557,7 @@
     }
   }
 
-  /* 📸 OCR 이미지 처리 엔진 */
+  /* 📸 OCR 이미지 처리 엔진 (유연하게 개선됨) */
   function processCaptureImage(input) {
     if (input.files && input.files[0]) {
       const status = document.getElementById('ocr-status');
@@ -580,10 +580,15 @@
   }
 
   function parseSunsang24TextForDay(rawText, day) {
-    let cleanText = rawText.replace(/[\r\n]+/g, " ");
+    // 콘솔에서 OCR 전체 텍스트 확인 가능 (디버깅용)
+    console.log("=== OCR Raw Text ===", rawText);
+
+    let cleanText = rawText.replace(/[\r\n]+/g, "\n");
+    let dayBlockText = cleanText;
+
+    // 1단계: 날짜 블록 찾기 시도 (없으면 전체 텍스트 대상)
     const dayRegex = new RegExp(`${day}\\s*일`, 'i');
     const match = cleanText.match(dayRegex);
-    let dayBlockText = cleanText;
 
     if (match) {
       let afterDayText = cleanText.substring(match.index);
@@ -597,11 +602,13 @@
       }
     }
 
+    // 점검일 체크
     let isMaintenanceText = dayBlockText.includes("점검일") || dayBlockText.includes("점검");
     if (isMaintenanceText) {
       document.getElementById('notice-text').value = "점검일";
     }
 
+    // 물때 정보 추출
     const waterMatch = dayBlockText.match(/(\d+\s*물)/);
     if (waterMatch) {
       document.getElementById('water-info').value = waterMatch[1].replace(/\s+/g, '');
@@ -610,65 +617,72 @@
     let compTbody = document.getElementById('guest-completed-list');
     compTbody.innerHTML = '';
 
-    if (!isMaintenanceText && dayBlockText.includes("예약완료")) {
-      let parts = dayBlockText.split("예약완료");
-      let compSection = parts[1];
-
-      let compItems = compSection.split('/');
-      compItems.forEach(item => {
-        item = item.replace(/\s+/g, '');
-        if (!item) return;
-
-        let nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님(?:\((?:선비\s*:\s*)?([0-9]+)\))?(?:\(([^\)]+)\))?/);
-        
-        if (!nameMatch) {
-          nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?\(([^\)]+)\)/);
-        }
-
-        if (nameMatch) {
-          let name = nameMatch[1];
-          let param1 = nameMatch[2] || '';
-          let param2 = nameMatch[3] || '';
-
-          let count = 1;
-          let note = ' ';
-
-          if (/^\d+$/.test(param1)) {
-            count = parseInt(param1);
-            note = param2 ? param2 : ' ';
-          } else if (/^\d+$/.test(param2)) {
-            count = parseInt(param2);
-            note = param1 ? param1 : ' ';
-          } else {
-            let explicitNumMatch = item.match(/선비\s*:\s*(\d+)/);
-            if (explicitNumMatch) {
-              count = parseInt(explicitNumMatch[1]);
-              note = (param1 || param2) ? (param1 || param2) : ' ';
-            } else {
-              let combined = param1 ? (param2 ? `${param1} ${param2}` : param1) : (param2 ? param2 : ' ');
-              note = combined.trim() === '' ? ' ' : combined;
-            }
-          }
-
-          let reelCount = 0;
-          let rodCount = 0;
-
-          let reelM = item.match(/베이트릴\s*:\s*(\d+)/) || note.match(/베이트릴\s*:\s*(\d+)/);
-          if (reelM) reelCount = parseInt(reelM[1]);
-
-          let rodM = item.match(/낚시대\s*:\s*(\d+)/) || note.match(/낚시대\s*:\s*(\d+)/);
-          if (rodM) rodCount = parseInt(rodM[1]);
-
-          addGuestRow('completed', {
-            name: name,
-            count: count,
-            note: note,
-            reel: reelCount,
-            rod: rodCount
-          });
-        }
-      });
+    // 2단계: '예약완료' 키워드가 있든 없든 손님 목록 라인을 유연하게 파싱
+    let targetSection = dayBlockText;
+    if (dayBlockText.includes("예약완료")) {
+      targetSection = dayBlockText.split("예약완료")[1];
     }
+
+    // 슬래시(/) 또는 줄바꿈(\n) 단위로 쪼개기
+    let compItems = targetSection.split(/[\/\n]/);
+
+    compItems.forEach(item => {
+      item = item.trim();
+      if (!item) return;
+
+      // '님' 글자를 포함하거나 이름 형태인 경우 추출 시도
+      let nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?(?:\((?:선비\s*:\s*)?([0-9]+)\))?(?:\(([^\)]+)\))?/);
+      
+      if (!nameMatch) {
+        nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?\s*([0-9]+)?명?/);
+      }
+
+      if (nameMatch && nameMatch[1]) {
+        let name = nameMatch[1];
+        // '일', '월', '물' 등 달력 날짜 관련 단어가 이름으로 잘못 잡히는 것 방지
+        if (name.includes('일') && name.replace(/[^0-9]/g, '') == day) return;
+
+        let param1 = nameMatch[2] || '';
+        let param2 = nameMatch[3] || '';
+
+        let count = 1;
+        let note = ' ';
+
+        if (/^\d+$/.test(param1)) {
+          count = parseInt(param1);
+          note = param2 ? param2 : ' ';
+        } else if (/^\d+$/.test(param2)) {
+          count = parseInt(param2);
+          note = param1 ? param1 : ' ';
+        } else {
+          let explicitNumMatch = item.match(/선비\s*:\s*(\d+)/) || item.match(/(\d+)명/);
+          if (explicitNumMatch) {
+            count = parseInt(explicitNumMatch[1]);
+            note = (param1 || param2) ? (param1 || param2) : ' ';
+          } else {
+            let combined = param1 ? (param2 ? `${param1} ${param2}` : param1) : (param2 ? param2 : ' ');
+            note = combined.trim() === '' ? ' ' : combined;
+          }
+        }
+
+        let reelCount = 0;
+        let rodCount = 0;
+
+        let reelM = item.match(/베이트릴\s*[:\s]*(\d+)/) || note.match(/베이트릴\s*[:\s]*(\d+)/);
+        if (reelM) reelCount = parseInt(reelM[1]);
+
+        let rodM = item.match(/낚시대\s*[:\s]*(\d+)/) || note.match(/낚시대\s*[:\s]*(\d+)/);
+        if (rodM) rodCount = parseInt(rodM[1]);
+
+        addGuestRow('completed', {
+          name: name,
+          count: count,
+          note: note,
+          reel: reelCount,
+          rod: rodCount
+        });
+      }
+    });
 
     calculateSales();
   }
@@ -790,35 +804,48 @@
     renderCharts(monthlySales, monthlyGuests);
   }
 
-  function renderCharts(salesArr, guestsArr) {
-    const months = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  function renderCharts(monthlySales, monthlyGuests) {
+    const monthsLabel = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
     if(salesChartObj) salesChartObj.destroy();
-    if(guestsChartObj) guestsChartObj.destroy();
-
     const ctxSales = document.getElementById('salesChart').getContext('2d');
     salesChartObj = new Chart(ctxSales, {
       type: 'bar',
       data: {
-        labels: months,
+        labels: monthsLabel,
         datasets: [{
           label: '월별 매출액',
-          data: salesArr,
-          backgroundColor: '#2563eb'
+          data: monthlySales,
+          backgroundColor: '#2563eb',
+          borderRadius: 4
         }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
       }
     });
 
+    if(guestsChartObj) guestsChartObj.destroy();
     const ctxGuests = document.getElementById('guestsChart').getContext('2d');
     guestsChartObj = new Chart(ctxGuests, {
-      type: 'bar',
+      type: 'line',
       data: {
-        labels: months,
+        labels: monthsLabel,
         datasets: [{
           label: '월별 승객 수',
-          data: guestsArr,
-          backgroundColor: '#16a34a'
+          data: monthlyGuests,
+          borderColor: '#16a34a',
+          backgroundColor: 'rgba(22, 163, 74, 0.1)',
+          fill: true,
+          tension: 0.2
         }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
       }
     });
   }
