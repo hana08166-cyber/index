@@ -114,7 +114,7 @@
     </div>
   </div>
 
-  <!-- TAB 1: 일별 관리 화면 (변경 없음) -->
+  <!-- TAB 1: 일별 관리 화면 -->
   <div id="tab-daily" class="tab-content active">
     <!-- 위쪽: 달력 -->
     <div class="card">
@@ -145,6 +145,7 @@
         <div>
           <button id="btn-edit" class="btn btn-warning" onclick="toggleEdit(true)">✏️ 수정하기</button>
           <button id="btn-save" class="btn btn-success" onclick="saveData()" style="display:none;">💾 저장하기</button>
+          <button id="btn-delete" class="btn btn-danger" onclick="deleteDateData()" style="display:none;">🗑️ 삭제하기</button>
           <button id="btn-cancel" class="btn btn-danger" onclick="toggleEdit(false)" style="display:none;">취소</button>
         </div>
       </div>
@@ -225,38 +226,26 @@
     </div>
   </div>
 
-  <!-- TAB 2: 매출 통계 & 그래프 화면 (어종별 그래프 제외, 일별 매출액 막대 그래프 적용) -->
+  <!-- TAB 2: 매출 통계 & 그래프 화면 -->
   <div id="tab-stats" class="tab-content" style="display: none;">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <h3>📊 매출 & 승객 통계 보고서</h3>
-        <div style="display: flex; gap: 8px;">
-          <select id="stats-view-mode" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px;">
-            <option value="year">년도별 추이</option>
-            <option value="month" selected>월별 추이</option>
-            <option value="day">일별 추이</option>
-          </select>
+        <h3>📊 월별 & 연도별 매출 통계 보고서</h3>
+        <div>
           <select id="stats-year-select" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px;">
-            <option value="2026">2026년</option>
-            <option value="2025">2025년</option>
-            <option value="2024">2024년</option>
-          </select>
-          <select id="stats-month-select" onchange="updateStatsView()" style="padding: 5px 10px; font-weight: bold; border-radius: 6px; display: none;">
-            <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
-            <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
-            <option value="7" selected>7월</option><option value="8">8월</option><option value="9">9월</option>
-            <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+            <option value="2026">2026년 통계</option>
+            <option value="2025">2025년 통계</option>
           </select>
         </div>
       </div>
 
       <div class="stats-summary-grid">
         <div class="stat-box">
-          <h5>기간 총 매출액</h5>
+          <h5>연도 총 매출액</h5>
           <div class="val" id="year-total-sales">0 원</div>
         </div>
         <div class="stat-box">
-          <h5>기간 총 승객 수</h5>
+          <h5>연도 총 승객 수</h5>
           <div class="val" id="year-total-guests">0 명</div>
         </div>
         <div class="stat-box">
@@ -265,10 +254,15 @@
         </div>
       </div>
 
-      <!-- 막대 그래프 영역 단독 배치 -->
-      <div style="background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 10px;">
-        <h4 id="sales-chart-title" style="font-size: 0.95rem; margin-bottom: 10px; color: #334155;">📊 매출액 추이 (단위: 원)</h4>
-        <canvas id="salesChart" height="110"></canvas>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">📈 월별 총 매출액 추이 (단위: 원)</h4>
+          <canvas id="salesChart" height="200"></canvas>
+        </div>
+        <div style="background: #fafafa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: #334155;">👥 월별 승객 수 추이 (단위: 명)</h4>
+          <canvas id="guestsChart" height="200"></canvas>
+        </div>
       </div>
     </div>
   </div>
@@ -281,6 +275,7 @@
   let dbData = {}; 
   let selectedDateStr = '2026-07-06';
   let salesChartObj = null;
+  let guestsChartObj = null;
 
   dbData['2026-07-06'] = {
     fish: '한치,오징어', water: '14물', price: 120000, location: '제주항 2부두', time: '18:30 ~ 04:30', notice: ' ', statusText: '',
@@ -553,6 +548,7 @@
 
     document.getElementById('btn-edit').style.display = isEdit ? 'none' : 'inline-block';
     document.getElementById('btn-save').style.display = isEdit ? 'inline-block' : 'none';
+    document.getElementById('btn-delete').style.display = isEdit ? 'inline-block' : 'none';
     document.getElementById('btn-cancel').style.display = isEdit ? 'inline-block' : 'none';
 
     if(!isEdit) {
@@ -735,161 +731,94 @@
     saveToGoogleSheet();
   }
 
-  // 📊 매출 통계 & 그래프 탭 로직 (막대 그래프 렌더링 적용)
-  function updateStatsView() {
-    const viewMode = document.getElementById('stats-view-mode').value;
-    const year = document.getElementById('stats-year-select').value;
-    const month = document.getElementById('stats-month-select').value;
-
-    const monthSelectEl = document.getElementById('stats-month-select');
-    if (viewMode === 'day') {
-      monthSelectEl.style.display = 'inline-block';
-    } else {
-      monthSelectEl.style.display = 'none';
+  // 해당 일자 데이터 전체 삭제 기능
+  function deleteDateData() {
+    if (confirm(`${selectedDateStr} 일자의 모든 데이터를 삭제하시겠습니까?`)) {
+      if (dbData[selectedDateStr]) {
+        delete dbData[selectedDateStr];
+      }
+      toggleEdit(false);
+      renderCalendar();
+      loadDateData(selectedDateStr);
+      saveToGoogleSheet();
     }
+  }
 
-    let labels = [];
-    let salesData = [];
-    let totalPeriodSales = 0;
-    let totalPeriodGuests = 0;
+  function updateStatsView() {
+    const year = document.getElementById('stats-year-select').value;
+    let monthlySales = new Array(12).fill(0);
+    let monthlyGuests = new Array(12).fill(0);
+    let totalYearSales = 0;
+    let totalYearGuests = 0;
     let totalOptionSales = 0;
 
-    if (viewMode === 'year') {
-      labels = ['2024년', '2025년', '2026년', '2027년', '2028년', '2029년', '2030년'];
-      salesData = new Array(labels.length).fill(0);
+    Object.keys(dbData).forEach(dateStr => {
+      if(dateStr.startsWith(year)) {
+        let monthIdx = parseInt(dateStr.split('-')[1]) - 1;
+        let data = dbData[dateStr];
+        
+        let daySales = 0;
+        let dayGuests = 0;
+        let basePrice = data.price || 120000;
 
-      Object.keys(dbData).forEach(dateStr => {
-        let y = dateStr.split('-')[0];
-        let yIdx = labels.findIndex(l => l.startsWith(y));
-        if (yIdx !== -1) {
-          let data = dbData[dateStr];
-          let basePrice = data.price || 120000;
-          let daySales = 0;
-          let dayGuests = 0;
+        (data.completed || []).forEach(g => {
+          let cnt = parseInt(g.count || 0);
+          let reel = parseInt(g.reel || 0);
+          let rod = parseInt(g.rod || 0);
+          
+          let sub = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+          let optSub = (reel * 10000) + (rod * 10000);
 
-          (data.completed || []).forEach(g => {
-            let cnt = parseInt(g.count || 0);
-            let reel = parseInt(g.reel || 0);
-            let rod = parseInt(g.rod || 0);
-            let subtotal = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
-            let optTotal = (reel * 10000) + (rod * 10000);
+          daySales += sub;
+          dayGuests += cnt;
+          totalOptionSales += optSub;
+        });
 
-            daySales += subtotal;
-            dayGuests += cnt;
-            totalOptionSales += optTotal;
-          });
-
-          salesData[yIdx] += daySales;
-          totalPeriodSales += daySales;
-          totalPeriodGuests += dayGuests;
+        if(monthIdx >= 0 && monthIdx < 12) {
+          monthlySales[monthIdx] += daySales;
+          monthlyGuests[monthIdx] += dayGuests;
         }
-      });
-      document.getElementById('sales-chart-title').innerText = "📊 년도별 총 매출액 막대 그래프 (단위: 원)";
-
-    } else if (viewMode === 'month') {
-      labels = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-      salesData = new Array(12).fill(0);
-
-      Object.keys(dbData).forEach(dateStr => {
-        let parts = dateStr.split('-');
-        let y = parts[0];
-        let m = parseInt(parts[1], 10);
-
-        if (y === year) {
-          let data = dbData[dateStr];
-          let basePrice = data.price || 120000;
-          let daySales = 0;
-          let dayGuests = 0;
-
-          (data.completed || []).forEach(g => {
-            let cnt = parseInt(g.count || 0);
-            let reel = parseInt(g.reel || 0);
-            let rod = parseInt(g.rod || 0);
-            let subtotal = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
-            let optTotal = (reel * 10000) + (rod * 10000);
-
-            daySales += subtotal;
-            dayGuests += cnt;
-            totalOptionSales += optTotal;
-          });
-
-          let mIdx = m - 1;
-          if (mIdx >= 0 && mIdx < 12) {
-            salesData[mIdx] += daySales;
-          }
-          totalPeriodSales += daySales;
-          totalPeriodGuests += dayGuests;
-        }
-      });
-      document.getElementById('sales-chart-title').innerText = `📊 ${year}년 월별 총 매출액 막대 그래프 (단위: 원)`;
-
-    } else {
-      let lastDay = new Date(year, month, 0).getDate();
-      labels = [];
-      for(let d=1; d<=lastDay; d++) {
-        labels.push(d + '일');
+        totalYearSales += daySales;
+        totalYearGuests += dayGuests;
       }
-      salesData = new Array(lastDay).fill(0);
+    });
 
-      let mStr = month < 10 ? '0' + month : month;
-      Object.keys(dbData).forEach(dateStr => {
-        let parts = dateStr.split('-');
-        let y = parts[0];
-        let m = parseInt(parts[1], 10);
-        let d = parseInt(parts[2], 10);
+    document.getElementById('year-total-sales').innerText = `${totalYearSales.toLocaleString()} 원`;
+    document.getElementById('year-total-guests').innerText = `${totalYearGuests.toLocaleString()} 명`;
+    document.getElementById('year-option-sales').innerText = `${totalOptionSales.toLocaleString()} 원`;
 
-        if (y === year && m === parseInt(month, 10)) {
-          let data = dbData[dateStr];
-          let basePrice = data.price || 120000;
-          let daySales = 0;
-          let dayGuests = 0;
+    renderCharts(monthlySales, monthlyGuests);
+  }
 
-          (data.completed || []).forEach(g => {
-            let cnt = parseInt(g.count || 0);
-            let reel = parseInt(g.reel || 0);
-            let rod = parseInt(g.rod || 0);
-            let subtotal = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
-            let optTotal = (reel * 10000) + (rod * 10000);
+  function renderCharts(salesArr, guestsArr) {
+    const months = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
-            daySales += subtotal;
-            dayGuests += cnt;
-            totalOptionSales += optTotal;
-          });
+    if(salesChartObj) salesChartObj.destroy();
+    if(guestsChartObj) guestsChartObj.destroy();
 
-          let dIdx = d - 1;
-          if (dIdx >= 0 && dIdx < lastDay) {
-            salesData[dIdx] += daySales;
-          }
-          totalPeriodSales += daySales;
-          totalPeriodGuests += dayGuests;
-        }
-      });
-      document.getElementById('sales-chart-title').innerText = `📊 ${year}년 ${month}월 일별 매출액 막대 그래프 (단위: 원)`;
-    }
-
-    // 상단 통계 요약 카드 반영
-    document.getElementById('year-total-sales').innerText = totalPeriodSales.toLocaleString() + ' 원';
-    document.getElementById('year-total-guests').innerText = totalPeriodGuests.toLocaleString() + ' 명';
-    document.getElementById('year-option-sales').innerText = totalOptionSales.toLocaleString() + ' 원';
-
-    // 매출액 막대 그래프(Bar Chart) 렌더링
-    const salesCtx = document.getElementById('salesChart').getContext('2d');
-    if (salesChartObj) salesChartObj.destroy();
-    salesChartObj = new Chart(salesCtx, {
+    const ctxSales = document.getElementById('salesChart').getContext('2d');
+    salesChartObj = new Chart(ctxSales, {
       type: 'bar',
       data: {
-        labels: labels,
+        labels: months,
         datasets: [{
-          label: '매출액 (원)',
-          data: salesData,
-          backgroundColor: '#2563eb',
-          borderRadius: 4
+          label: '월별 매출액',
+          data: salesArr,
+          backgroundColor: '#2563eb'
         }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } }
+      }
+    });
+
+    const ctxGuests = document.getElementById('guestsChart').getContext('2d');
+    guestsChartObj = new Chart(ctxGuests, {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [{
+          label: '월별 승객 수',
+          data: guestsArr,
+          backgroundColor: '#16a34a'
+        }]
       }
     });
   }
