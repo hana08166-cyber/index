@@ -209,11 +209,12 @@
         <table>
           <thead>
             <tr>
-              <th style="width: 18%;">이름</th>
-              <th style="width: 10%;">인원</th>
-              <th style="width: 32%;">비고 (메모)</th>
-              <th style="width: 10%;">베이트릴</th>
-              <th style="width: 10%;">낚시대</th>
+              <th style="width: 15%;">이름</th>
+              <th style="width: 8%;">인원</th>
+              <th style="width: 24%;">비고 (메모)</th>
+              <th style="width: 8%;">베이트릴</th>
+              <th style="width: 8%;">낚시대</th>
+              <th style="width: 17%;">결제방식</th>
               <th style="width: 20%;">개별 금액</th>
               <th class="edit-only" style="display:none; width:30px;">삭제</th>
             </tr>
@@ -273,75 +274,28 @@
       </div>
 
       <form id="expense-form">
-        <!-- 1. 식비 목록 -->
+        <!-- 통합 지출 목록 -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-          <h4 style="color: #2563eb; font-size:0.85rem;">🍽️ 식비 내역</h4>
-          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow('food')" style="display:none;">+ 식비 추가</button>
+          <h4 style="color: #b91c1c; font-size:0.85rem;">💸 지출 내역</h4>
+          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow()" style="display:none;">+ 지출 추가</button>
         </div>
         <table>
           <thead>
             <tr>
-              <th style="width: 35%;">내용</th>
-              <th style="width: 20%;">단가 (원)</th>
-              <th style="width: 15%;">수량</th>
-              <th style="width: 20%;">총 금액</th>
-              <th class="exp-edit-only" style="display:none; width:10%;">삭제</th>
+              <th style="width: 18%;">항목</th>
+              <th style="width: 27%;">내용 (직접 입력)</th>
+              <th style="width: 17%;">단가 (원)</th>
+              <th style="width: 12%;">수량</th>
+              <th style="width: 18%;">총 금액</th>
+              <th class="exp-edit-only" style="display:none; width:8%;">삭제</th>
             </tr>
           </thead>
-          <tbody id="expense-food-list"></tbody>
-        </table>
-
-        <!-- 2. 선박수리 목록 -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
-          <h4 style="color: #7e22ce; font-size:0.85rem;">🛠️ 선박수리 내역</h4>
-          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow('repair')" style="display:none;">+ 수리비 추가</button>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 35%;">내용</th>
-              <th style="width: 20%;">단가 (원)</th>
-              <th style="width: 15%;">수량</th>
-              <th style="width: 20%;">총 금액</th>
-              <th class="exp-edit-only" style="display:none; width:10%;">삭제</th>
-            </tr>
-          </thead>
-          <tbody id="expense-repair-list"></tbody>
-        </table>
-
-        <!-- 3. 기타 목록 -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
-          <h4 style="color: #c2410c; font-size:0.85rem;">📝 기타 지출 내역</h4>
-          <button type="button" class="btn btn-primary btn-sm exp-edit-only" onclick="addExpenseRow('etc')" style="display:none;">+ 기타 지출 추가</button>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 35%;">내용 (직접 입력)</th>
-              <th style="width: 20%;">단가 (원)</th>
-              <th style="width: 15%;">수량</th>
-              <th style="width: 20%;">총 금액</th>
-              <th class="exp-edit-only" style="display:none; width:10%;">삭제</th>
-            </tr>
-          </thead>
-          <tbody id="expense-etc-list"></tbody>
+          <tbody id="expense-list"></tbody>
         </table>
 
         <!-- 당일 지출 요약 -->
         <div class="summary-card expense">
           <h4>💸 당일 지출 합계 요약</h4>
-          <div class="summary-row">
-            <span>식비 합계:</span>
-            <span id="exp-sum-food">0 원</span>
-          </div>
-          <div class="summary-row">
-            <span>선박수리 합계:</span>
-            <span id="exp-sum-repair">0 원</span>
-          </div>
-          <div class="summary-row">
-            <span>기타 지출 합계:</span>
-            <span id="exp-sum-etc">0 원</span>
-          </div>
           <div class="summary-row total">
             <span>당일 총 지출액:</span>
             <span id="exp-sum-total">0 원</span>
@@ -455,6 +409,9 @@
     expenses: {
       food: [{ desc: '선원 식사', price: 15000, qty: 2 }],
       repair: [],
+      fuel: [],
+      ice: [],
+      insurance: [],
       etc: []
     }
   };
@@ -687,6 +644,13 @@
     }
   }
 
+  function getExpenseTotal(expenses = {}) {
+    return Object.values(expenses).reduce((total, list) => {
+      if (!Array.isArray(list)) return total;
+      return total + list.reduce((sum, item) => sum + ((parseInt(item.price) || 0) * (parseInt(item.qty) || 0)), 0);
+    }, 0);
+  }
+
   /* 지출 달력 렌더링 */
   function renderExpCalendar() {
     const year = parseInt(document.getElementById('exp-cal-year').value);
@@ -719,10 +683,7 @@
 
       if(dbData[dateKey] && dbData[dateKey].expenses) {
         let exp = dbData[dateKey].expenses;
-        let foodSum = (exp.food || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-        let repairSum = (exp.repair || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-        let etcSum = (exp.etc || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-        let totalExp = foodSum + repairSum + etcSum;
+        let totalExp = getExpenseTotal(exp);
 
         if(totalExp > 0) {
           let expTag = document.createElement('span');
@@ -778,15 +739,14 @@
   function loadExpDateData(dateKey) {
     document.getElementById('selected-exp-date-title').innerText = `📅 ${dateKey} 지출 상세 내역`;
     let data = dbData[dateKey] || {};
-    let expenses = data.expenses || { food: [], repair: [], etc: [] };
+    let expenses = data.expenses || {};
 
-    document.getElementById('expense-food-list').innerHTML = '';
-    document.getElementById('expense-repair-list').innerHTML = '';
-    document.getElementById('expense-etc-list').innerHTML = '';
+    document.getElementById('expense-list').innerHTML = '';
 
-    (expenses.food || []).forEach(item => addExpenseRow('food', item));
-    (expenses.repair || []).forEach(item => addExpenseRow('repair', item));
-    (expenses.etc || []).forEach(item => addExpenseRow('etc', item));
+    const categoryOrder = ['food', 'repair', 'fuel', 'ice', 'insurance', 'etc'];
+    categoryOrder.forEach(category => {
+      (expenses[category] || []).forEach(item => addExpenseRow(category, item));
+    });
 
     calculateExpenses();
   }
@@ -815,6 +775,12 @@
       <td><input type="text" class="form-control g-note" value="${noteVal}" disabled placeholder="비고"></td>
       <td><input type="number" class="form-control g-reel" value="${data.reel || 0}" disabled oninput="calculateSales()" placeholder="0"></td>
       <td><input type="number" class="form-control g-rod" value="${data.rod || 0}" disabled oninput="calculateSales()" placeholder="0"></td>
+      <td>
+        <select class="form-control g-payment" disabled onchange="calculateSales()">
+          <option value="cash" ${(data.payment || 'cash') === 'cash' ? 'selected' : ''}>현금/이체</option>
+          <option value="card" ${data.payment === 'card' ? 'selected' : ''}>카드(선상24)</option>
+        </select>
+      </td>
       <td><input type="text" class="form-control g-subtotal" value="0 원" disabled style="text-align:right; font-weight:bold; color:#1e40af;"></td>
       <td class="edit-only" style="display:${document.getElementById('btn-save').style.display}; text-align:center;">
         <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); calculateSales();">X</button>
@@ -823,16 +789,23 @@
     tbody.appendChild(tr);
   }
 
-  function addExpenseRow(category, data = {}) {
-    let tbodyId = category === 'food' ? 'expense-food-list' : (category === 'repair' ? 'expense-repair-list' : 'expense-etc-list');
-    let tbody = document.getElementById(tbodyId);
+  function addExpenseRow(category = 'food', data = {}) {
+    let tbody = document.getElementById('expense-list');
     let tr = document.createElement('tr');
-
-    let descPlaceholder = category === 'food' ? '예: 떡볶이' : (category === 'repair' ? '예: 엔진 부품' : '예: 내용 직접 입력');
     let isEditMode = document.getElementById('exp-btn-save').style.display !== 'none';
 
     tr.innerHTML = `
-      <td><input type="text" class="form-control exp-desc" value="${data.desc || ''}" ${isEditMode ? '' : 'disabled'} placeholder="${descPlaceholder}"></td>
+      <td>
+        <select class="form-control exp-category" ${isEditMode ? '' : 'disabled'} onchange="calculateExpenses()">
+          <option value="food" ${category === 'food' ? 'selected' : ''}>식비</option>
+          <option value="repair" ${category === 'repair' ? 'selected' : ''}>선박수리</option>
+          <option value="fuel" ${category === 'fuel' ? 'selected' : ''}>주유비</option>
+          <option value="ice" ${category === 'ice' ? 'selected' : ''}>얼음</option>
+          <option value="insurance" ${category === 'insurance' ? 'selected' : ''}>보험료</option>
+          <option value="etc" ${category === 'etc' ? 'selected' : ''}>기타</option>
+        </select>
+      </td>
+      <td><input type="text" class="form-control exp-desc" value="${data.desc || ''}" ${isEditMode ? '' : 'disabled'} placeholder="내용을 직접 입력하세요"></td>
       <td><input type="number" class="form-control exp-price" value="${data.price || 0}" ${isEditMode ? '' : 'disabled'} oninput="calculateExpenses()" placeholder="0"></td>
       <td><input type="number" class="form-control exp-qty" value="${data.qty || 1}" ${isEditMode ? '' : 'disabled'} oninput="calculateExpenses()" placeholder="1"></td>
       <td><input type="text" class="form-control exp-subtotal" value="0 원" disabled style="text-align:right; font-weight:bold; color:#b91c1c;"></td>
@@ -864,7 +837,7 @@
   }
 
   function toggleExpEdit(isEdit) {
-    const inputs = document.querySelectorAll('#expense-form input');
+    const inputs = document.querySelectorAll('#expense-form input, #expense-form select');
     inputs.forEach(i => i.disabled = !isEdit);
 
     document.querySelectorAll('.exp-edit-only').forEach(el => {
@@ -903,94 +876,211 @@
   }
 
   function parseSunsang24TextForDay(rawText, day) {
-    let cleanText = rawText.replace(/[\r\n]+/g, " ");
-    const dayRegex = new RegExp(`${day}\\s*일`, 'i');
-    const match = cleanText.match(dayRegex);
-    let dayBlockText = cleanText;
+    let normalizedText = rawText
+      .replace(/\r/g, '\n')
+      .replace(/[|｜]/g, '/')
+      .replace(/예약\s*완료/g, '예약완료')
+      .replace(/취소\s*완료/g, '취소완료')
+      .replace(/예약\s*종료/g, '예약종료')
+      .replace(/선상\s*24/g, '선상24')
+      .replace(/카\s*드/g, '카드');
 
-    if (match) {
-      let afterDayText = cleanText.substring(match.index);
-      const nextDayRegex = new RegExp(`(${day + 1}|${day + 2})\\s*일`, 'i');
-      const nextMatch = afterDayText.substring(10).match(nextDayRegex);
+    const dayRegex = new RegExp(`${day}\\s*일`, 'i');
+    const dayMatch = normalizedText.match(dayRegex);
+    let dayBlockText = normalizedText;
+
+    if (dayMatch) {
+      const afterDayText = normalizedText.substring(dayMatch.index);
+      const nextDayRegex = new RegExp(
+        `(?:^|\\n|\\s)(${day + 1}|${day + 2})\\s*일`,
+        'i'
+      );
+      const nextMatch = afterDayText
+        .substring(dayMatch[0].length)
+        .match(nextDayRegex);
 
       if (nextMatch) {
-        dayBlockText = afterDayText.substring(0, nextMatch.index + 10);
+        dayBlockText = afterDayText.substring(
+          0,
+          nextMatch.index + dayMatch[0].length
+        );
       } else {
         dayBlockText = afterDayText;
       }
     }
 
-    let isMaintenanceText = dayBlockText.includes("점검일") || dayBlockText.includes("점검");
+    const isMaintenanceText =
+      dayBlockText.includes('점검일') ||
+      dayBlockText.includes('점검');
+
     if (isMaintenanceText) {
-      document.getElementById('notice-text').value = "점검일";
+      document.getElementById('notice-text').value = '점검일';
     }
 
     const waterMatch = dayBlockText.match(/(\d+\s*물)/);
     if (waterMatch) {
-      document.getElementById('water-info').value = waterMatch[1].replace(/\s+/g, '');
+      document.getElementById('water-info').value =
+        waterMatch[1].replace(/\s+/g, '');
     }
 
-    let compTbody = document.getElementById('guest-completed-list');
+    const compTbody = document.getElementById('guest-completed-list');
     compTbody.innerHTML = '';
 
-    if (!isMaintenanceText && dayBlockText.includes("예약완료")) {
-      let parts = dayBlockText.split("예약완료");
-      let compSection = parts[1];
+    if (!isMaintenanceText) {
+      const reservationStart = dayBlockText.indexOf('예약완료');
 
-      let compItems = compSection.split('/');
-      compItems.forEach(item => {
-        item = item.replace(/\s+/g, '');
-        if (!item) return;
+      if (reservationStart !== -1) {
+        let reservationSection = dayBlockText.substring(
+          reservationStart + '예약완료'.length
+        );
 
-        let nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님(?:\((?:선비\s*:\s*)?([0-9]+)\))?(?:\(([^\)]+)\))?/);
-        
-        if (!nameMatch) {
-          nameMatch = item.match(/([가-힣a-zA-Z0-9]+)님?\(([^\)]+)\)/);
+        // 취소완료 또는 예약종료부터는 읽지 않습니다.
+        const stopWords = ['취소완료', '예약종료'];
+        let stopIndex = reservationSection.length;
+
+        stopWords.forEach(word => {
+          const idx = reservationSection.indexOf(word);
+          if (idx !== -1 && idx < stopIndex) {
+            stopIndex = idx;
+          }
+        });
+
+        reservationSection = reservationSection.substring(0, stopIndex);
+
+        /*
+         * 이름이 줄바꿈으로 끊긴 경우를 복원합니다.
+         * 예: "엄\n정욱님" → "엄정욱님"
+         *
+         * 전체 공백을 없애되 '/'는 남겨 두어,
+         * 기존 구분 기호도 함께 활용합니다.
+         */
+        const compactSection = reservationSection
+          .replace(/\s+/g, '')
+          .replace(/／/g, '/');
+
+        /*
+         * '/' 유무와 관계없이 '님'이 붙은 모든 이름을 찾습니다.
+         * 이름 길이는 제한하지 않습니다.
+         *
+         * 예:
+         * 김님
+         * 이영훈님
+         * 엄정욱님
+         * ABC123님
+         */
+        const nameRegex = /([가-힣a-zA-Z0-9]+)님/g;
+        const nameMatches = [];
+        let match;
+
+        while ((match = nameRegex.exec(compactSection)) !== null) {
+          let rawName = match[1];
+
+          /*
+           * 앞 사람의 결제 배지나 표시가 이름 앞에 붙어서 인식된 경우 제거합니다.
+           * 예: "선상24김윤식님" → "김윤식"
+           *     "카드선상24임재은님" → "임재은"
+           */
+          rawName = rawName
+            .replace(/^(?:메|선상24|카드)+/, '')
+            .replace(/^(?:예약완료)+/, '');
+
+          if (!rawName) continue;
+
+          nameMatches.push({
+            name: rawName,
+            start: match.index,
+            end: nameRegex.lastIndex
+          });
         }
 
-        if (nameMatch) {
-          let name = nameMatch[1];
-          let param1 = nameMatch[2] || '';
-          let param2 = nameMatch[3] || '';
+        nameMatches.forEach((guest, index) => {
+          /*
+           * 현재 이름부터 다음 이름 직전까지를
+           * 현재 손님의 전체 정보로 봅니다.
+           *
+           * 따라서 '/'가 빠지거나 마지막 '/'가 없어도
+           * 마지막 손님까지 처리됩니다.
+           */
+          const segmentEnd =
+            index + 1 < nameMatches.length
+              ? nameMatches[index + 1].start
+              : compactSection.length;
+
+          const guestSegment = compactSection.substring(
+            guest.start,
+            segmentEnd
+          );
 
           let count = 1;
-          let note = ' ';
 
-          if (/^\d+$/.test(param1)) {
-            count = parseInt(param1);
-            note = param2 ? param2 : ' ';
-          } else if (/^\d+$/.test(param2)) {
-            count = parseInt(param2);
-            note = param1 ? param1 : ' ';
+          const parentheses = [
+            ...guestSegment.matchAll(/\(([^)]*)\)/g)
+          ].map(item => item[1]);
+
+          const plainCount = parentheses.find(value =>
+            /^\d+$/.test(value)
+          );
+
+          if (plainCount) {
+            count = parseInt(plainCount);
           } else {
-            let explicitNumMatch = item.match(/선비\s*:\s*(\d+)/);
-            if (explicitNumMatch) {
-              count = parseInt(explicitNumMatch[1]);
-              note = (param1 || param2) ? (param1 || param2) : ' ';
-            } else {
-              let combined = param1 ? (param2 ? `${param1} ${param2}` : param1) : (param2 ? param2 : ' ');
-              note = combined.trim() === '' ? ' ' : combined;
+            const fareCountMatch =
+              guestSegment.match(/선비[:：]?(\d+)/i);
+
+            if (fareCountMatch) {
+              count = parseInt(fareCountMatch[1]);
             }
           }
 
           let reelCount = 0;
           let rodCount = 0;
 
-          let reelM = item.match(/베이트릴\s*:\s*(\d+)/) || note.match(/베이트릴\s*:\s*(\d+)/);
-          if (reelM) reelCount = parseInt(reelM[1]);
+          const reelMatch =
+            guestSegment.match(/베이트릴[:：]?(\d+)/i);
 
-          let rodM = item.match(/낚시대\s*:\s*(\d+)/) || note.match(/낚시대\s*:\s*(\d+)/);
-          if (rodM) rodCount = parseInt(rodM[1]);
+          if (reelMatch) {
+            reelCount = parseInt(reelMatch[1]);
+          }
+
+          const rodMatch =
+            guestSegment.match(/낚시대[:：]?(\d+)/i);
+
+          if (rodMatch) {
+            rodCount = parseInt(rodMatch[1]);
+          }
+
+          const noteParts = parentheses.filter(value => {
+            if (/^\d+$/.test(value)) return false;
+            if (/선비[:：]?\d+/i.test(value)) return false;
+            if (/베이트릴[:：]?\d+/i.test(value)) return false;
+            if (/낚시대[:：]?\d+/i.test(value)) return false;
+            return value.trim() !== '';
+          });
+
+          const note =
+            noteParts.length > 0
+              ? noteParts.join(' ')
+              : ' ';
+
+          /*
+           * 현재 손님 이름부터 다음 손님 이름 직전까지에
+           * '선상24' 또는 '카드'가 있으면 카드 결제로 처리합니다.
+           */
+          const payment =
+            /선상24|카드/i.test(guestSegment)
+              ? 'card'
+              : 'cash';
 
           addGuestRow('completed', {
-            name: name,
+            name: guest.name,
             count: count,
             note: note,
             reel: reelCount,
-            rod: rodCount
+            rod: rodCount,
+            payment: payment
           });
-        }
-      });
+        });
+      }
     }
 
     calculateSales();
@@ -1006,9 +1096,13 @@
       let count = parseInt(r.querySelector('.g-count').value) || 0;
       let reel = parseInt(r.querySelector('.g-reel').value) || 0;
       let rod = parseInt(r.querySelector('.g-rod').value) || 0;
+      let payment = r.querySelector('.g-payment').value;
 
       let personTotalFee = (count * price) + (reel * 10000) + (rod * 10000);
-      
+      if(payment === 'card') {
+        personTotalFee = Math.round(personTotalFee * 0.97);
+      }
+
       r.querySelector('.g-subtotal').value = `${personTotalFee.toLocaleString()} 원`;
 
       totalCount += count;
@@ -1020,39 +1114,16 @@
   }
 
   function calculateExpenses() {
-    let foodSum = 0;
-    let repairSum = 0;
-    let etcSum = 0;
+    let totalExp = 0;
 
-    document.querySelectorAll('#expense-food-list tr').forEach(r => {
+    document.querySelectorAll('#expense-list tr').forEach(r => {
       let price = parseInt(r.querySelector('.exp-price').value) || 0;
       let qty = parseInt(r.querySelector('.exp-qty').value) || 0;
       let sub = price * qty;
       r.querySelector('.exp-subtotal').value = `${sub.toLocaleString()} 원`;
-      foodSum += sub;
+      totalExp += sub;
     });
 
-    document.querySelectorAll('#expense-repair-list tr').forEach(r => {
-      let price = parseInt(r.querySelector('.exp-price').value) || 0;
-      let qty = parseInt(r.querySelector('.exp-qty').value) || 0;
-      let sub = price * qty;
-      r.querySelector('.exp-subtotal').value = `${sub.toLocaleString()} 원`;
-      repairSum += sub;
-    });
-
-    document.querySelectorAll('#expense-etc-list tr').forEach(r => {
-      let price = parseInt(r.querySelector('.exp-price').value) || 0;
-      let qty = parseInt(r.querySelector('.exp-qty').value) || 0;
-      let sub = price * qty;
-      r.querySelector('.exp-subtotal').value = `${sub.toLocaleString()} 원`;
-      etcSum += sub;
-    });
-
-    let totalExp = foodSum + repairSum + etcSum;
-
-    document.getElementById('exp-sum-food').innerText = `${foodSum.toLocaleString()} 원`;
-    document.getElementById('exp-sum-repair').innerText = `${repairSum.toLocaleString()} 원`;
-    document.getElementById('exp-sum-etc').innerText = `${etcSum.toLocaleString()} 원`;
     document.getElementById('exp-sum-total').innerText = `${totalExp.toLocaleString()} 원`;
   }
 
@@ -1068,7 +1139,8 @@
         count: parseInt(r.querySelector('.g-count').value) || 1,
         note: noteVal,
         reel: parseInt(r.querySelector('.g-reel').value) || 0,
-        rod: parseInt(r.querySelector('.g-rod').value) || 0
+        rod: parseInt(r.querySelector('.g-rod').value) || 0,
+        payment: r.querySelector('.g-payment').value
       });
     });
 
@@ -1096,27 +1168,18 @@
   }
 
   function saveExpData() {
-    let foodList = [];
-    document.querySelectorAll('#expense-food-list tr').forEach(r => {
-      foodList.push({
-        desc: r.querySelector('.exp-desc').value,
-        price: parseInt(r.querySelector('.exp-price').value) || 0,
-        qty: parseInt(r.querySelector('.exp-qty').value) || 0
-      });
-    });
+    let expenses = {
+      food: [],
+      repair: [],
+      fuel: [],
+      ice: [],
+      insurance: [],
+      etc: []
+    };
 
-    let repairList = [];
-    document.querySelectorAll('#expense-repair-list tr').forEach(r => {
-      repairList.push({
-        desc: r.querySelector('.exp-desc').value,
-        price: parseInt(r.querySelector('.exp-price').value) || 0,
-        qty: parseInt(r.querySelector('.exp-qty').value) || 0
-      });
-    });
-
-    let etcList = [];
-    document.querySelectorAll('#expense-etc-list tr').forEach(r => {
-      etcList.push({
+    document.querySelectorAll('#expense-list tr').forEach(r => {
+      let category = r.querySelector('.exp-category').value;
+      expenses[category].push({
         desc: r.querySelector('.exp-desc').value,
         price: parseInt(r.querySelector('.exp-price').value) || 0,
         qty: parseInt(r.querySelector('.exp-qty').value) || 0
@@ -1124,12 +1187,7 @@
     });
 
     if(!dbData[selectedExpDateStr]) dbData[selectedExpDateStr] = {};
-
-    dbData[selectedExpDateStr].expenses = {
-      food: foodList,
-      repair: repairList,
-      etc: etcList
-    };
+    dbData[selectedExpDateStr].expenses = expenses;
 
     toggleExpEdit(false);
     renderExpCalendar();
@@ -1198,16 +1256,17 @@
             let cnt = parseInt(g.count || 0);
             let reel = parseInt(g.reel || 0);
             let rod = parseInt(g.rod || 0);
-            daySales += (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            let guestSales = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            if(g.payment === 'card') {
+              guestSales = Math.round(guestSales * 0.97);
+            }
+            daySales += guestSales;
           });
 
           let dayExpense = 0;
           if(data.expenses) {
             let exp = data.expenses;
-            let fSum = (exp.food || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-            let rSum = (exp.repair || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-            let eSum = (exp.etc || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-            dayExpense = fSum + rSum + eSum;
+            dayExpense = getExpenseTotal(exp);
           }
 
           if(monthIdx >= 0 && monthIdx < 12) {
@@ -1246,16 +1305,17 @@
             let cnt = parseInt(g.count || 0);
             let reel = parseInt(g.reel || 0);
             let rod = parseInt(g.rod || 0);
-            daySales += (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            let guestSales = (cnt * basePrice) + (reel * 10000) + (rod * 10000);
+            if(g.payment === 'card') {
+              guestSales = Math.round(guestSales * 0.97);
+            }
+            daySales += guestSales;
           });
 
           let dayExpense = 0;
           if(data.expenses) {
             let exp = data.expenses;
-            let fSum = (exp.food || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-            let rSum = (exp.repair || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-            let eSum = (exp.etc || []).reduce((a, b) => a + ((parseInt(b.price) || 0) * (parseInt(b.qty) || 0)), 0);
-            dayExpense = fSum + rSum + eSum;
+            dayExpense = getExpenseTotal(exp);
           }
 
           salesData[d - 1] = daySales;
